@@ -7,11 +7,11 @@ import Data.List
 import System.IO.Error
 
 
-data Document = Title String
-              | Paragraph String
-              | BeginSection
-              | EndSection
-              | Section
+data Token = Title String
+           | Paragraph String
+           | BeginSection
+           | EndSection
+             deriving (Show)
 
 
 indentation :: String -> Int
@@ -27,21 +27,21 @@ trim :: String -> String
 trim ln = dropWhileEnd isSpace (dropWhile isSpace ln)
 
 
-section :: Int -> Int -> String -> [String]
-section idn1 idn2 ln =
+section :: Int -> Int -> Maybe Token
+section idn1 idn2 =
     case compare idn1 idn2 of
-      EQ -> [ln]
-      LT -> ["begin", ln]
-      GT -> ["end", ln]
+      EQ -> Nothing
+      LT -> Just BeginSection
+      GT -> Just EndSection
 
 
-reduce :: Int -> String -> [String]
+reduce :: Int -> String -> [Token]
 reduce idn ln =
-    let t = if last (dropWhileEnd isSpace ln) == '.' then "paragraph" else "title" in
-    section idn (indentation ln) $ t ++ " = " ++ (trim ln)
+    let t = if isPunctuation $ last (dropWhileEnd isSpace ln) then Paragraph else Title in
+    maybe [t $ trim ln] (\s -> [s, t $ trim ln]) $ section idn (indentation ln)
 
 
-classify :: Int -> [String] -> [String]
+classify :: Int -> [String] -> [Token]
 classify _ [] = []
 classify idn [ln] | all isSpace ln = []
 classify idn [ln] = reduce idn ln
@@ -53,9 +53,7 @@ classify idn (ln1:ln2:lns) =
     else
         classify idn (join ln1 ln2:lns)
 
-
 main =
     do contents <- getContents
        let lns = lines contents
-       putStrLn $ show lns
-       mapM_ putStrLn $ classify 0 lns
+       mapM_ (putStrLn . show) $ classify 0 lns
