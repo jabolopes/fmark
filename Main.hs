@@ -2,14 +2,14 @@ module Main where
 
 import Prelude hiding (lex)
 
+import Control.Monad.State hiding (join)
+
 import Data.Char
 import Data.List
 
 import System.Console.GetOpt
 import System.Environment
 import System.IO.Error
-
-import Debug.Trace
 
 
 data Token = Text String
@@ -37,7 +37,7 @@ section (idn1:idns) idn2 =
     case compare idn1 idn2 of
       EQ -> []
       LT -> [BeginSection]
-      GT -> EndSection:section idns idn2
+      GT -> EndSection:section (dropWhile (> idn1) idns) idn2
 
 
 reduce :: [Int] -> String -> [Token]
@@ -50,7 +50,6 @@ push x xs = xs
 
 
 classify :: [Int] -> [String] -> [Token]
-classify idns _ | trace ("idns = " ++ show idns) False = undefined
 classify _ [] = []
 classify _ [ln] | all isSpace ln = []
 classify idns [ln] = reduce idns ln
@@ -95,6 +94,52 @@ docify tokens =
               loop tokens (((Section $ Content $ reverse top):bot):st)
 
 
+data XmlState = XmlState Int
+type XmlM a = State XmlState a
+
+
+getIdn :: XmlM Int
+getIdn =
+    do XmlState idn <- get
+       return idn
+
+
+withIdn :: XmlM a -> XmlM a
+withIdn m =
+    do idn <- getIdn
+       put $ XmlState $ idn + 2
+       val <- m
+       put $ XmlState idn
+       return val
+
+
+docToXml :: Document -> String
+docToXml doc =
+    intercalate "\n" ["<xml>",
+                      str,
+                      "</xml>"]
+    where str = evalState (loop doc) (XmlState 2)
+
+          xmlIndent lvl str = replicate lvl ' ' ++ str
+
+          xmlShortTag tag str =
+              do idn <- getIdn
+                 return $ xmlIndent idn "<" ++ tag ++ ">" ++ str ++ "</" ++ tag ++ ">"
+
+          xmlLongTag tag m =
+              do idn <- getIdn
+                 str <- withIdn m
+                 return $
+                   (xmlIndent idn "<" ++ tag ++ ">\n") ++
+                   str ++ "\n" ++
+                   (xmlIndent idn "</" ++ tag ++ ">")
+
+          loop (Heading str) = xmlShortTag "heading" str
+          loop (Paragraph str) = xmlShortTag "paragraph" str
+          loop (Content docs) = xmlLongTag "content" $ return concat `ap` (sequence $ intersperse (return "\n") (map loop docs))
+          loop (Section doc) = xmlLongTag "section" $ loop doc
+
+
 docToLatex doc =
     intercalate "\n\n" ["\\documentclass[a4paper]{article}",
                         "\\begin{document}",
@@ -118,41 +163,33 @@ docToLatex doc =
           loop lvl (Content docs) = intercalate "\n\n" $ map (loop lvl) docs
           loop lvl (Section doc) = loop (lvl + 1) doc
 
-          -- loop lvl (Section (Heading str)) =
-          --     ltSection lvl str ++ "\n\n" ++ loop (lvl + 1) doc
 
-          -- loop lvl (Section (Content ((Heading str):docs))) =
-          --     ltSection lvl str ++ "\n\n" ++ loop (lvl + 1) (Content docs)
-
-          -- loop lvl (Section doc) =
-          --     ltSection lvl "" ++ "\n\n" ++ loop (lvl + 1) doc
-    
-
-process isDoc =
+process :: Flag -> IO ()
+process format =
     do contents <- getContents
        let lns = lines contents
        let doc = docify $ classify [0] lns
-       let fn = if isDoc then
-                      show
-                  else
-                      docToLatex
+       let fn = case format of
+                  OutputDoc -> show
+                  OutputLatex -> docToLatex
+                  OutputXml -> docToXml
        putStrLn $ fn doc
 
 
 data Flag = OutputDoc
           | OutputLatex
+          | OutputXml
             deriving (Eq, Show)
 
 opts = [Option ['d'] ["doc"] (NoArg OutputDoc) "Output doc",
-        Option ['l'] ["latex"] (NoArg OutputLatex) "Output latex"]
+        Option ['l'] ["latex"] (NoArg OutputLatex) "Output latex",
+        Option ['x'] ["xml"] (NoArg OutputXml) "Output xml"]
 
 main =
     do args <- getArgs
        case getOpt Permute opts args of
-         (opts, nonOpts, []) -> if OutputLatex `elem` opts then
-                                    process False
-                                else
-                                    process True
+         ([], _, []) -> process OutputDoc
+         (opts, nonOpts, []) -> process $ last opts
          (_, _, errs) -> do progName <- getProgName
                             ioError (userError (concat errs ++ usageInfo (header progName) opts))
     where header progName = "Usage: " ++ progName ++ " [OPTION...] files..."
