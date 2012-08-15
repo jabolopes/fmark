@@ -12,6 +12,8 @@ import System.Console.GetOpt
 import System.Environment
 import System.IO.Error
 
+import Debug.Trace
+
 
 data Token = Text String
            | BeginSection
@@ -51,6 +53,7 @@ push x xs = xs
 
 
 classify :: [Int] -> [String] -> [Token]
+classify idns _ | trace ("idns = " ++ show idns) False = undefined
 classify _ [] = []
 classify _ [ln] | all isSpace ln = []
 classify idns [ln] = reduce idns ln
@@ -93,6 +96,11 @@ docify tokens =
 
           loop (EndSection:tokens) (top:bot:st) =
               loop tokens (((Section $ Content $ reverse top):bot):st)
+
+          loop tokens st =
+              error $ "\n\n\tloop: unhandled case" ++
+                      "\n\n\t tokens = " ++ show tokens ++
+                      "\n\n\t st = " ++ show st ++ "\n\n"
 
 
 data XmlState = XmlState Int
@@ -170,21 +178,24 @@ process :: Flag -> IO ()
 process format =
     do contents <- getContents
        let lns = lines contents
-       let doc = docify $ classify [0] lns
+       let doc = classify [0] lns
        let fn = case format of
-                  OutputDoc -> show
-                  OutputLatex -> docToLatex
-                  OutputXml -> docToXml
-       putStrLn $ fn doc
+                  OutputDoc -> putStrLn . show . docify
+                  OutputLatex -> putStrLn . docToLatex . docify
+                  OutputTokens -> mapM_ (putStrLn . show)
+                  OutputXml -> putStrLn . docToXml . docify
+       fn doc
 
 
 data Flag = OutputDoc
           | OutputLatex
+          | OutputTokens
           | OutputXml
             deriving (Eq, Show)
 
 opts = [Option ['d'] ["doc"] (NoArg OutputDoc) "Output doc",
         Option ['l'] ["latex"] (NoArg OutputLatex) "Output latex",
+        Option ['t'] ["token"] (NoArg OutputTokens) "Output tokens",
         Option ['x'] ["xml"] (NoArg OutputXml) "Output xml"]
 
 main =
