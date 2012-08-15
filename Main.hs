@@ -53,7 +53,57 @@ classify idn (ln1:ln2:lns) =
     else
         classify idn (join ln1 ln2:lns)
 
+
+
+data Document = DToken Token
+              | Content [Document]
+              | Section Document
+
+instance Show Document where
+    show (DToken token) = show token
+    show (Content docs) = intercalate "\n" $ map show docs
+    show (Section doc) = "begin\n" ++ show doc ++ "\nend"
+
+
+isContent (Title _) = True
+isContent (Paragraph _) = True
+isContent _ = False
+
+
+closeSecs :: Int -> [Token] -> [Token]
+closeSecs lvl [] = [EndSection | _ <- [1..lvl]]
+closeSecs lvl (token@BeginSection:tokens) = token:closeSecs (lvl + 1) tokens
+closeSecs lvl (token@EndSection:tokens) = token:closeSecs (lvl - 1) tokens
+closeSecs lvl (token:tokens) = token:closeSecs lvl tokens
+
+
+docify :: [Token] -> Document
+docify tokens =
+    -- restructure (closeSecs 0 tokens) [[]]
+    restructure tokens [[]]
+    where restructure :: [Token] -> [[Document]] -> Document
+          restructure [] [doc] = Content $ reverse doc
+
+          restructure [] st = restructure [EndSection] st
+
+          restructure (token:tokens) (top:st) | isContent token =
+              restructure tokens ((DToken token:top):st)
+
+          restructure (BeginSection:tokens) st =
+              restructure tokens ([]:st)
+
+          restructure (EndSection:tokens) (top:bot:st) =
+              restructure tokens (((Section $ Content $ reverse top):bot):st)
+
+          restructure tokens st =
+              error $ "\n\n\trestructure: unhandled case" ++
+                      "\n\n\t tokens = " ++ show tokens ++
+                      "\n\n\t st = " ++ show st ++ "\n\n"
+              
+
 main =
     do contents <- getContents
        let lns = lines contents
-       mapM_ (putStrLn . show) $ classify 0 lns
+       -- mapM_ (putStrLn . show) $ classify 0 lns
+       -- mapM_ (putStrLn . show) $ closeSecs 0 $ classify 0 lns
+       putStrLn $ show $ docify $ classify 0 lns
