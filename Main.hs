@@ -4,6 +4,9 @@ import Prelude hiding (lex)
 
 import Data.Char
 import Data.List
+
+import System.Console.GetOpt
+import System.Environment
 import System.IO.Error
 
 
@@ -84,7 +87,62 @@ docify tokens =
               loop tokens (((Section $ Content $ reverse top):bot):st)
 
 
-main =
+docToLatex doc =
+    intercalate "\n\n" ["\\documentclass[a4paper]{article}",
+                        "\\begin{document}",
+                        loop 0 doc,
+                        "\\end{document}"]
+    where ltStr str =
+              concatMap (\c -> if c == '#' then "\\#" else [c]) str
+
+          ltBold str =
+              "\\textbf{" ++ ltStr str ++ "}"
+
+          ltSection lvl str
+              | lvl < 3 = "\\" ++ (concat (replicate lvl "sub")) ++ "section{" ++ ltStr str ++ "}"
+              | lvl == 3 = "\\paragraph{" ++ ltStr str ++ "}"
+              | lvl == 4 = "\\subparagraph{" ++ ltStr str ++ "}"
+
+          ltParagraph str = ltStr str
+
+          loop lvl (Heading str) = ltSection lvl str
+          loop lvl (Paragraph str) = ltParagraph str
+          loop lvl (Content docs) = intercalate "\n\n" $ map (loop lvl) docs
+          loop lvl (Section doc) = loop (lvl + 1) doc
+
+          -- loop lvl (Section (Heading str)) =
+          --     ltSection lvl str ++ "\n\n" ++ loop (lvl + 1) doc
+
+          -- loop lvl (Section (Content ((Heading str):docs))) =
+          --     ltSection lvl str ++ "\n\n" ++ loop (lvl + 1) (Content docs)
+
+          -- loop lvl (Section doc) =
+          --     ltSection lvl "" ++ "\n\n" ++ loop (lvl + 1) doc
+    
+
+process isDoc =
     do contents <- getContents
        let lns = lines contents
-       putStrLn $ show $ docify $ classify 0 lns
+       if isDoc then
+           putStrLn $ show $ docify $ classify 0 lns
+       else
+           putStrLn $ docToLatex $ docify $ classify 0 lns
+
+
+data Flag = OutputDoc
+          | OutputLatex
+            deriving (Eq, Show)
+
+opts = [Option ['d'] ["doc"] (NoArg OutputDoc) "Output doc",
+        Option ['l'] ["latex"] (NoArg OutputLatex) "Output latex"]
+
+main =
+    do args <- getArgs
+       case getOpt Permute opts args of
+         (opts, nonOpts, []) -> if OutputLatex `elem` opts then
+                                    process False
+                                else
+                                    process True
+         (_, _, errs) -> do progName <- getProgName
+                            ioError (userError (concat errs ++ usageInfo (header progName) opts))
+    where header progName = "Usage: " ++ progName ++ " [OPTION...] files..."
