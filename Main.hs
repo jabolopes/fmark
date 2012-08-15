@@ -9,6 +9,8 @@ import System.Console.GetOpt
 import System.Environment
 import System.IO.Error
 
+import Debug.Trace
+
 
 data Token = Text String
            | BeginSection
@@ -29,30 +31,36 @@ trim :: String -> String
 trim ln = dropWhileEnd isSpace (dropWhile isSpace ln)
 
 
-section :: Int -> Int -> Maybe Token
-section idn1 idn2 =
+section :: [Int] -> Int -> [Token]
+section [] _ = error "section: idns is empty"
+section (idn1:idns) idn2 =
     case compare idn1 idn2 of
-      EQ -> Nothing
-      LT -> Just BeginSection
-      GT -> Just EndSection
+      EQ -> []
+      LT -> [BeginSection]
+      GT -> EndSection:section idns idn2
 
 
-reduce :: Int -> String -> [Token]
-reduce idn ln =
-    maybe [Text $ trim ln] (\s -> [s, Text $ trim ln]) $ section idn (indentation ln)
+reduce :: [Int] -> String -> [Token]
+reduce idns ln = section idns (indentation ln) ++ [Text $ trim ln]
 
 
-classify :: Int -> [String] -> [Token]
+push :: Eq a => a -> [a] -> [a]
+push x (y:ys) | x /= y = x:y:ys
+push x xs = xs
+
+
+classify :: [Int] -> [String] -> [Token]
+classify idns _ | trace ("idns = " ++ show idns) False = undefined
 classify _ [] = []
-classify idn [ln] | all isSpace ln = []
-classify idn [ln] = reduce idn ln
-classify idn (ln1:lns) | all isSpace ln1 = classify idn lns
+classify _ [ln] | all isSpace ln = []
+classify idns [ln] = reduce idns ln
+classify idns (ln1:lns) | all isSpace ln1 = classify idns lns
 
-classify idn (ln1:ln2:lns) =
+classify idns (ln1:ln2:lns) =
     if all isSpace ln2 || indentation ln1 /= indentation ln2 then
-        classify idn [ln1] ++ classify (indentation ln1) (ln2:lns)
+        reduce idns ln1 ++ classify (push (indentation ln1) idns) (ln2:lns)
     else
-        classify idn (join ln1 ln2:lns)
+        classify idns (join ln1 ln2:lns)
 
 
 
@@ -123,10 +131,12 @@ docToLatex doc =
 process isDoc =
     do contents <- getContents
        let lns = lines contents
-       if isDoc then
-           putStrLn $ show $ docify $ classify 0 lns
-       else
-           putStrLn $ docToLatex $ docify $ classify 0 lns
+       let doc = docify $ classify [0] lns
+       let fn = if isDoc then
+                      show
+                  else
+                      docToLatex
+       putStrLn $ fn doc
 
 
 data Flag = OutputDoc
