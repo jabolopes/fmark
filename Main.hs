@@ -5,6 +5,7 @@ import Prelude hiding (lex)
 import Control.Monad.State hiding (join)
 
 import Data.Char
+import Data.Functor
 import Data.List
 
 import System.Console.GetOpt
@@ -136,10 +137,11 @@ docToXml doc =
 
           loop (Heading str) = xmlShortTag "heading" str
           loop (Paragraph str) = xmlShortTag "paragraph" str
-          loop (Content docs) = xmlLongTag "content" $ return concat `ap` (sequence $ intersperse (return "\n") (map loop docs))
+          loop (Content docs) = xmlLongTag "content" $ intercalate "\n" <$> mapM loop docs 
           loop (Section doc) = xmlLongTag "section" $ loop doc
 
 
+docToLatex :: Document -> String
 docToLatex doc =
     intercalate "\n\n" ["\\documentclass[a4paper]{article}",
                         "\\begin{document}",
