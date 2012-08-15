@@ -70,16 +70,8 @@ isContent (Paragraph _) = True
 isContent _ = False
 
 
-closeSecs :: Int -> [Token] -> [Token]
-closeSecs lvl [] = [EndSection | _ <- [1..lvl]]
-closeSecs lvl (token@BeginSection:tokens) = token:closeSecs (lvl + 1) tokens
-closeSecs lvl (token@EndSection:tokens) = token:closeSecs (lvl - 1) tokens
-closeSecs lvl (token:tokens) = token:closeSecs lvl tokens
-
-
 docify :: [Token] -> Document
 docify tokens =
-    -- restructure (closeSecs 0 tokens) [[]]
     restructure tokens [[]]
     where restructure :: [Token] -> [[Document]] -> Document
           restructure [] [doc] = Content $ reverse doc
@@ -105,5 +97,4 @@ main =
     do contents <- getContents
        let lns = lines contents
        -- mapM_ (putStrLn . show) $ classify 0 lns
-       -- mapM_ (putStrLn . show) $ closeSecs 0 $ classify 0 lns
        putStrLn $ show $ docify $ classify 0 lns
