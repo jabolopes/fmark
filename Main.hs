@@ -7,8 +7,7 @@ import Data.List
 import System.IO.Error
 
 
-data Token = Title String
-           | Paragraph String
+data Token = Text String
            | BeginSection
            | EndSection
              deriving (Show)
@@ -37,8 +36,7 @@ section idn1 idn2 =
 
 reduce :: Int -> String -> [Token]
 reduce idn ln =
-    let t = if isPunctuation $ last (dropWhileEnd isSpace ln) then Paragraph else Title in
-    maybe [t $ trim ln] (\s -> [s, t $ trim ln]) $ section idn (indentation ln)
+    maybe [Text $ trim ln] (\s -> [s, Text $ trim ln]) $ section idn (indentation ln)
 
 
 classify :: Int -> [String] -> [Token]
@@ -55,46 +53,38 @@ classify idn (ln1:ln2:lns) =
 
 
 
-data Document = DToken Token
+data Document = Heading String
+              | Paragraph String
               | Content [Document]
               | Section Document
 
 instance Show Document where
-    show (DToken token) = show token
+    show (Heading str) = "Heading = " ++ str
+    show (Paragraph str) = "Paragraph = " ++ str
     show (Content docs) = intercalate "\n" $ map show docs
     show (Section doc) = "begin\n" ++ show doc ++ "\nend"
 
 
-isContent (Title _) = True
-isContent (Paragraph _) = True
-isContent _ = False
-
-
 docify :: [Token] -> Document
 docify tokens =
-    restructure tokens [[]]
-    where restructure :: [Token] -> [[Document]] -> Document
-          restructure [] [doc] = Content $ reverse doc
+    loop tokens [[]]
+    where loop :: [Token] -> [[Document]] -> Document
+          loop [] [doc] = Content $ reverse doc
 
-          restructure [] st = restructure [EndSection] st
+          loop [] st = loop [EndSection] st
 
-          restructure (token:tokens) (top:st) | isContent token =
-              restructure tokens ((DToken token:top):st)
+          loop ((Text str):tokens) (top:st) =
+              let cons = if isPunctuation $ last str then Paragraph else Heading in
+              loop tokens ((cons str:top):st)
 
-          restructure (BeginSection:tokens) st =
-              restructure tokens ([]:st)
+          loop (BeginSection:tokens) st =
+              loop tokens ([]:st)
 
-          restructure (EndSection:tokens) (top:bot:st) =
-              restructure tokens (((Section $ Content $ reverse top):bot):st)
+          loop (EndSection:tokens) (top:bot:st) =
+              loop tokens (((Section $ Content $ reverse top):bot):st)
 
-          restructure tokens st =
-              error $ "\n\n\trestructure: unhandled case" ++
-                      "\n\n\t tokens = " ++ show tokens ++
-                      "\n\n\t st = " ++ show st ++ "\n\n"
-              
 
 main =
     do contents <- getContents
        let lns = lines contents
-       -- mapM_ (putStrLn . show) $ classify 0 lns
        putStrLn $ show $ docify $ classify 0 lns
