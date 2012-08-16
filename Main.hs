@@ -12,8 +12,6 @@ import System.Console.GetOpt
 import System.Environment
 import System.IO.Error
 
-import Debug.Trace
-
 
 data Token = Text String
            | BeginSection
@@ -53,17 +51,22 @@ push x xs = xs
 
 
 classify :: [Int] -> [String] -> [Token]
-classify idns _ | trace ("idns = " ++ show idns) False = undefined
 classify _ [] = []
 classify _ [ln] | all isSpace ln = []
-classify idns [ln] = reduce idns ln
 classify idns (ln1:lns) | all isSpace ln1 = classify idns lns
+classify idns [ln] = reduce idns ln
 
 classify idns (ln1:ln2:lns) =
-    if all isSpace ln2 || indentation ln1 /= indentation ln2 then
-        reduce idns ln1 ++ classify (push (indentation ln1) idns) (ln2:lns)
+    if all isSpace ln2 then
+        reduce idns ln1 ++ classify (push idn1 (dropWhile (> idn1) idns)) lns
+    else if idn1 < idn2 then
+        reduce idns ln1 ++ classify (push idn1 (dropWhile (> idn1) idns)) (ln2:lns)
+    else if idn1 > idn2 then
+        reduce idns ln1 ++ classify (push idn1 idns) (ln2:lns)
     else
         classify idns (join ln1 ln2:lns)
+    where idn1 = indentation ln1
+          idn2 = indentation ln2
 
 
 
