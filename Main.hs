@@ -9,8 +9,13 @@ import Data.Functor
 import Data.List
 
 import System.Console.GetOpt
+import System.Directory
 import System.Environment
+import System.FilePath
+import System.IO
 import System.IO.Error
+import System.Process
+import System.Unix.Directory
 
 
 data Token = Text String
@@ -209,3 +214,19 @@ main =
          (_, _, errs) -> do progName <- getProgName
                             ioError (userError (concat errs ++ usageInfo (header progName) opts))
     where header progName = "Usage: " ++ progName ++ " [OPTION...] files..."
+
+
+pdflatex inFp =
+    do withTemporaryDirectory "fmark" $
+         \fp ->  withFile "/dev/null" WriteMode $
+                   \nullH -> do (_, _, _, h) <- createProcess (proc "pdflatex" ["-output-directory=" ++ fp,
+                                                                                "-interaction=nonstopmode",
+                                                                                inFp]){ std_out = UseHandle nullH,
+                                                                                        std_err = UseHandle nullH }
+                                waitForProcess h
+                                copyFile (pdfFp fp) outFp
+                                return $ outFp
+    where outDir = takeDirectory inFp
+          outFn = addExtension (dropExtensions (takeBaseName inFp)) "pdf"
+          outFp = combine outDir outFn
+          pdfFp fp = combine fp outFn
