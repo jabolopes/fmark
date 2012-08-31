@@ -61,15 +61,11 @@ classify _ [ln] | all isSpace ln = []
 classify idns (ln1:lns) | all isSpace ln1 = classify idns lns
 classify idns [ln] = reduce idns ln
 
-classify idns (ln1:ln2:lns) =
-    if all isSpace ln2 then
-        reduce idns ln1 ++ classify (push idn1 (dropWhile (> idn1) idns)) lns
-    else if idn1 < idn2 then
-        reduce idns ln1 ++ classify (push idn1 (dropWhile (> idn1) idns)) (ln2:lns)
-    else if idn1 > idn2 then
-        reduce idns ln1 ++ classify (push idn1 idns) (ln2:lns)
-    else
-        classify idns (join ln1 ln2:lns)
+classify idns (ln1:ln2:lns)
+    | all isSpace ln2 = reduce idns ln1 ++ classify (push idn1 (dropWhile (> idn1) idns)) lns
+    | idn1 < idn2 = reduce idns ln1 ++ classify (push idn1 (dropWhile (> idn1) idns)) (ln2:lns)
+    | idn1 > idn2 = reduce idns ln1 ++ classify (push idn1 idns) (ln2:lns)
+    | otherwise = classify idns (join ln1 ln2:lns)
     where idn1 = indentation ln1
           idn2 = indentation ln2
 
@@ -182,51 +178,84 @@ docToLatex doc =
           loop lvl (Section doc) = loop (lvl + 1) doc
 
 
-process :: Flag -> IO ()
-process format =
-    do contents <- getContents
-       let lns = lines contents
-       let doc = classify [0] lns
-       let fn = case format of
-                  OutputDoc -> putStrLn . show . docify
-                  OutputLatex -> putStrLn . docToLatex . docify
-                  OutputTokens -> mapM_ (putStrLn . show)
-                  OutputXml -> putStrLn . docToXml . docify
-       fn doc
+--pdflatex :: String -> IO String
+pdflatex outFp contents =
+    do withTemporaryDirectory "fmark" $
+         \outDir -> withFile "/dev/null" WriteMode $
+                    \hNull -> do (Just hIn, _, _, h) <- createProcess
+                                                        (proc "pdflatex" ["-output-directory=" ++ outDir,
+                                                                          "--jobname=" ++ outFname])
+                                                        { std_in = CreatePipe,
+                                                          std_out = UseHandle hNull,
+                                                          std_err = UseHandle hNull }
+                                 mapM_ (hPutStrLn hIn) $ filterLines contents
+                                 hClose hIn
+                                 waitForProcess h
+                                 copyFile (pdfFp outDir) (addExtension outFp "pdf")
+    where outFname = "texput"
+          pdfFp fp = combine fp $ addExtension outFname "pdf"
+          
+
+filterLines :: String -> [String]
+filterLines str =
+    [ ln | ln <- lines str, (trim ln) /= "" ]
+
+
+fmark :: Flag -> String -> IO String
+fmark fmt contents =
+    formatFn $ classify [0] $ lines contents
+    where formatFn =
+              case fmt of
+                OutputDoc -> return . show . docify
+                OutputLatex -> return . docToLatex . docify
+                OutputPdf -> error "cannot use stdin with PDF output format"
+                OutputTokens -> return . intercalate "\n" . map show
+                OutputXml -> return . docToXml . docify
+
+
+fmarkFp :: Flag -> String -> String -> IO ()
+fmarkFp OutputPdf contents fp =
+    formatFn $ classify [0] $ lines contents
+    where formatFn = (pdflatex fp) . docToLatex . docify
+
+
+fmarkH :: Flag -> Handle -> Either Handle String -> IO ()
+fmarkH fmt hIn (Left hOut) =
+    do contents <- hGetContents hIn
+       fmark fmt contents >>= hPutStrLn hOut
+
+fmarkH fmt hIn (Right fp) =
+    do contents <- hGetContents hIn
+       fmarkFp fmt contents fp
 
 
 data Flag = OutputDoc
           | OutputLatex
+          | OutputPdf
           | OutputTokens
           | OutputXml
             deriving (Eq, Show)
 
 opts = [Option ['d'] ["doc"] (NoArg OutputDoc) "Output doc",
         Option ['l'] ["latex"] (NoArg OutputLatex) "Output latex",
+        Option ['p'] ["pdf"] (NoArg OutputPdf) "Output PDF",
         Option ['t'] ["token"] (NoArg OutputTokens) "Output tokens",
         Option ['x'] ["xml"] (NoArg OutputXml) "Output xml"]
 
 main =
     do args <- getArgs
        case getOpt Permute opts args of
-         ([], _, []) -> process OutputDoc
-         (opts, nonOpts, []) -> process $ last opts
+         (opts, nonOpts, []) -> processOpts opts nonOpts
          (_, _, errs) -> do progName <- getProgName
                             ioError (userError (concat errs ++ usageInfo (header progName) opts))
     where header progName = "Usage: " ++ progName ++ " [OPTION...] files..."
-
-
-pdflatex inFp =
-    do withTemporaryDirectory "fmark" $
-         \fp ->  withFile "/dev/null" WriteMode $
-                   \nullH -> do (_, _, _, h) <- createProcess (proc "pdflatex" ["-output-directory=" ++ fp,
-                                                                                "-interaction=nonstopmode",
-                                                                                inFp]){ std_out = UseHandle nullH,
-                                                                                        std_err = UseHandle nullH }
-                                waitForProcess h
-                                copyFile (pdfFp fp) outFp
-                                return $ outFp
-    where outDir = takeDirectory inFp
-          outFn = addExtension (dropExtensions (takeBaseName inFp)) "pdf"
-          outFp = combine outDir outFn
-          pdfFp fp = combine fp outFn
+          processOpts opts nonOpts =
+              let fmt = if null opts then OutputDoc else last opts in
+              let hInFn = case nonOpts of
+                            [] -> \fn -> fn stdin
+                            _ -> withFile (last nonOpts) ReadMode in
+              let eOut = case nonOpts of
+                          [] -> Left stdout
+                          _ | fmt /= OutputPdf -> Left stdout
+                          _ -> Right $ last nonOpts in
+              hInFn $ \hIn -> fmarkH fmt hIn eOut
