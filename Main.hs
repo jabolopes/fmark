@@ -25,8 +25,7 @@ data Token = Text String
 
 
 indentation :: String -> Int
-indentation ln =
-    length $ takeWhile isSpace ln
+indentation ln = length $ takeWhile isSpace ln
 
 
 join :: String -> String -> String
@@ -52,7 +51,7 @@ reduce idns ln = section idns (indentation ln) ++ [Text $ trim ln]
 
 push :: Eq a => a -> [a] -> [a]
 push x (y:ys) | x /= y = x:y:ys
-push x xs = xs
+push _ xs = xs
 
 
 classify :: [Int] -> [String] -> [Token]
@@ -88,7 +87,6 @@ docify tokens =
     loop tokens [[]]
     where loop :: [Token] -> [[Document]] -> Document
           loop [] [doc] = Content $ reverse doc
-
           loop [] st = loop [EndSection] st
 
           loop ((Text str):tokens) (top:st) =
@@ -128,9 +126,7 @@ withIdn m =
 
 docToXml :: Document -> String
 docToXml doc =
-    intercalate "\n" ["<xml>",
-                      str,
-                      "</xml>"]
+    intercalate "\n" ["<xml>", str, "</xml>"]
     where str = evalState (loop doc) (XmlState 2)
 
           xmlIndent lvl str = replicate lvl ' ' ++ str
@@ -178,7 +174,7 @@ docToLatex doc =
           loop lvl (Section doc) = loop (lvl + 1) doc
 
 
---pdflatex :: String -> IO String
+pdflatex :: FilePath -> String -> IO ()
 pdflatex outFp contents =
     do withTemporaryDirectory "fmark" $
          \outDir -> withFile "/dev/null" WriteMode $
@@ -197,8 +193,7 @@ pdflatex outFp contents =
           
 
 filterLines :: String -> [String]
-filterLines str =
-    [ ln | ln <- lines str, (trim ln) /= "" ]
+filterLines str = [ ln | ln <- lines str, (trim ln) /= "" ]
 
 
 fmark :: Flag -> String -> IO String
@@ -234,28 +229,43 @@ data Flag = OutputDoc
           | OutputPdf
           | OutputTokens
           | OutputXml
+          | Help
             deriving (Eq, Show)
 
-opts = [Option ['d'] ["doc"] (NoArg OutputDoc) "Output doc",
-        Option ['l'] ["latex"] (NoArg OutputLatex) "Output latex",
-        Option ['p'] ["pdf"] (NoArg OutputPdf) "Output PDF",
-        Option ['t'] ["token"] (NoArg OutputTokens) "Output tokens",
-        Option ['x'] ["xml"] (NoArg OutputXml) "Output xml"]
+options = [Option ['d'] ["doc"] (NoArg OutputDoc) "Output doc",
+           Option ['l'] ["latex"] (NoArg OutputLatex) "Output latex",
+           Option ['p'] ["pdf"] (NoArg OutputPdf) "Output PDF",
+           Option ['t'] ["token"] (NoArg OutputTokens) "Output tokens",
+           Option ['x'] ["xml"] (NoArg OutputXml) "Output xml",
+           Option ['h'] ["help"] (NoArg Help) "Display help"]
 
 main =
     do args <- getArgs
-       case getOpt Permute opts args of
+       case getOpt Permute options args of
          (opts, nonOpts, []) -> processOpts opts nonOpts
-         (_, _, errs) -> do progName <- getProgName
-                            ioError (userError (concat errs ++ usageInfo (header progName) opts))
+         (_, _, errs) -> do putErrors errs
+                            putUsage
     where header progName = "Usage: " ++ progName ++ " [OPTION...] files..."
+
+          putUsage =
+              do progName <- getProgName
+                 hPutStr stderr $ usageInfo (header progName) options
+
+          putErrors errs =
+              hPutStrLn stderr $ intercalate ", " $ map (dropWhileEnd (== '\n')) errs
+          
+          processOpts opts _ | Help `elem` opts = putUsage
           processOpts opts nonOpts =
-              let fmt = if null opts then OutputDoc else last opts in
-              let hInFn = case nonOpts of
-                            [] -> \fn -> fn stdin
-                            _ -> withFile (last nonOpts) ReadMode in
-              let eOut = case nonOpts of
-                          [] -> Left stdout
-                          _ | fmt /= OutputPdf -> Left stdout
-                          _ -> Right $ last nonOpts in
               hInFn $ \hIn -> fmarkH fmt hIn eOut
+              where fmt = case opts of
+                            [] -> OutputDoc
+                            _ -> last opts
+                    
+                    hInFn = case nonOpts of
+                              [] -> \fn -> fn stdin
+                              _ -> withFile (last nonOpts) ReadMode
+
+                    eOut = case nonOpts of
+                             [] -> Left stdout
+                             _ | fmt /= OutputPdf -> Left stdout
+                             _ -> Right $ last nonOpts
