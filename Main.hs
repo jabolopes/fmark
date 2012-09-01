@@ -18,43 +18,49 @@ import System.Process
 import System.Unix.Directory
 
 
--- | The number of spaces at the begining of a 'String'
+-- | The lines of a 'String' without empty lines.
+filterLines :: String -> [String]
+filterLines str = [ ln | ln <- lines str, trim ln /= "" ]
+
+
+-- | The number of space characters at the begining of a 'String'.
 indentation :: String -> Int
 indentation ln = length $ takeWhile isSpace ln
 
 
 -- | A 'String' that results from joining two 'String's with a single
--- space in between
+-- space in between.
 join :: String -> String -> String
 join ln1 ln2 = (dropWhileEnd isSpace ln1) ++ " " ++ (dropWhile isSpace ln2)
 
 
--- | The 'List' containing 
+-- | The 'List' with an additional element only if that element is not
+-- equal to the first element in the original 'List'.
 push :: Eq a => a -> [a] -> [a]
 push x (y:ys) | x /= y = x:y:ys
 push _ xs = xs
 
 
--- | A 'String' without leading and trailing spaces
+-- | A 'String' without leading and trailing space characters.
 trim :: String -> String
-trim ln = dropWhileEnd isSpace (dropWhile isSpace ln)
+trim str = dropWhileEnd isSpace (dropWhile isSpace str)
 
 
 data Token
-    -- | The 'text' token represents a part of text
+    -- | The 'Text' token corresponds to successive lines of text
+    -- joined together.
     = Text String
-    -- | The 'BeginSection' token represents the beginning of a new
-    -- section, which corresponds to an increase in indentation or an
-    -- unmatched decrease in indentation.
+    -- | The beginning of a new section corresponds to an increase in
+    -- indentation or an unmatched decrease in indentation.
     | BeginSection
-    -- | The 'EndSection' token represents the end of a section, which
-    -- corresponds to a decrease in indentation.
+    -- | The end of a section corresponds to a decrease in
+    -- indentation.
     | EndSection
       deriving (Show)
 
 
 -- | A 'List' of 'BeginSection' and 'EndSection' 'Token's issued
--- according the indentation stack and current indentation
+-- according the indentation stack and current indentation.
 section :: [Int] -> Int -> [Token]
 section [] _ = error "section: idns is empty"
 section (idn1:idns) idn2 =
@@ -65,12 +71,12 @@ section (idn1:idns) idn2 =
 
 
 -- | A 'List' of 'Text' 'Token's preceeded by the appropriate
--- 'BeginSection' or 'EndSection' 'Token's
+-- 'BeginSection' or 'EndSection' 'Token's.
 reduce :: [Int] -> String -> [Token]
 reduce idns ln = section idns (indentation ln) ++ [Text $ trim ln]
 
 
--- | Tokenizes a string
+-- | Tokenizes a string.
 classify :: String -> [Token]
 classify lns =
     classify' [0] $ lines lns
@@ -88,13 +94,13 @@ classify lns =
 
 
 data Document
-    -- | A 'Heading' in a 'Document'
+    -- | A 'Heading' in a 'Document'.
     = Heading String
-    -- | A 'Paragraph' in a 'Document'
+    -- | A 'Paragraph' in a 'Document'.
     | Paragraph String
-    -- | A sequence of 'Document' elements
+    -- | A sequence of 'Document' elements.
     | Content [Document]
-    -- | A subsection in a 'Document'
+    -- | A subsection in a 'Document'.
     | Section Document
 
 instance Show Document where
@@ -104,7 +110,7 @@ instance Show Document where
     show (Section doc) = "begin\n" ++ show doc ++ "\nend"
 
 
--- | Parses a sequence of 'Token's into a 'Document'
+-- | Parses a sequence of 'Token's into a 'Document'.
 docify :: [Token] -> Document
 docify tokens =
     loop tokens [[]]
@@ -213,12 +219,28 @@ pdflatex outFp contents =
                                  copyFile (pdfFp outDir) (addExtension outFp "pdf")
     where outFname = "texput"
           pdfFp fp = combine fp $ addExtension outFname "pdf"
-          
-
-filterLines :: String -> [String]
-filterLines str = [ ln | ln <- lines str, (trim ln) /= "" ]
 
 
+-- | Command line flags that specify output format or display usage
+-- information.
+data Flag
+    -- | Output to 'stdout' in 'Document' format.
+    = OutputDoc
+    -- | Output to 'stdout' in LaTeX format.
+    | OutputLatex
+    -- | Output to a PDF file using LaTeX format and 'pdflatex'.
+    | OutputPdf
+    -- | Output to 'stdout' the 'Token's of the input.
+    | OutputTokens
+    -- | Output to 'stdout' in XML format.
+    | OutputXml
+    -- | Display usage information.
+    | Help
+      deriving (Eq, Show)
+
+
+-- | Run friendly markup with the specified output format and input
+-- 'String'. The output is a 'String'.
 fmark :: Flag -> String -> IO String
 fmark fmt contents =
     formatFn $ classify contents
@@ -231,13 +253,19 @@ fmark fmt contents =
                 OutputXml -> return . docToXml . docify
 
 
-fmarkFp :: Flag -> String -> String -> IO ()
+-- | Run friendly markup with the specified output format and input
+-- 'String'. The output is written to the file specified by
+-- 'FilePath'.
+fmarkFp :: Flag -> String -> FilePath -> IO ()
 fmarkFp OutputPdf contents fp =
     formatFn $ classify contents
     where formatFn = (pdflatex fp) . docToLatex . docify
 
 
-fmarkH :: Flag -> Handle -> Either Handle String -> IO ()
+-- | Run friendly markup with the specified output format and input
+-- 'Handle'. The result is 'Either' written to an output 'Handle' or
+-- to the file specified by 'FilePath'.
+fmarkH :: Flag -> Handle -> Either Handle FilePath -> IO ()
 fmarkH fmt hIn (Left hOut) =
     do contents <- hGetContents hIn
        fmark fmt contents >>= hPutStrLn hOut
@@ -247,14 +275,7 @@ fmarkH fmt hIn (Right fp) =
        fmarkFp fmt contents fp
 
 
-data Flag = OutputDoc
-          | OutputLatex
-          | OutputPdf
-          | OutputTokens
-          | OutputXml
-          | Help
-            deriving (Eq, Show)
-
+-- | Command line options.
 options = [Option ['d'] ["doc"] (NoArg OutputDoc) "Output doc",
            Option ['l'] ["latex"] (NoArg OutputLatex) "Output latex",
            Option ['p'] ["pdf"] (NoArg OutputPdf) "Output PDF",
@@ -262,6 +283,8 @@ options = [Option ['d'] ["doc"] (NoArg OutputDoc) "Output doc",
            Option ['x'] ["xml"] (NoArg OutputXml) "Output xml",
            Option ['h'] ["help"] (NoArg Help) "Display help"]
 
+
+-- | Main.
 main =
     do args <- getArgs
        case getOpt Permute options args of
