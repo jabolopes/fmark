@@ -216,7 +216,7 @@ pdflatex outFp contents =
                                  mapM_ (hPutStrLn hIn) $ filterLines contents
                                  hClose hIn
                                  waitForProcess h
-                                 copyFile (pdfFp outDir) (addExtension outFp "pdf")
+                                 copyFile (pdfFp outDir) (addExtension (dropExtensions outFp) "pdf")
     where outFname = "texput"
           pdfFp fp = combine fp $ addExtension outFname "pdf"
 
