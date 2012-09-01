@@ -18,24 +18,43 @@ import System.Process
 import System.Unix.Directory
 
 
-data Token = Text String
-           | BeginSection
-           | EndSection
-             deriving (Show)
-
-
+-- | The number of spaces at the begining of a 'String'
 indentation :: String -> Int
 indentation ln = length $ takeWhile isSpace ln
 
 
+-- | A 'String' that results from joining two 'String's with a single
+-- space in between
 join :: String -> String -> String
 join ln1 ln2 = (dropWhileEnd isSpace ln1) ++ " " ++ (dropWhile isSpace ln2)
 
 
+-- | The 'List' containing 
+push :: Eq a => a -> [a] -> [a]
+push x (y:ys) | x /= y = x:y:ys
+push _ xs = xs
+
+
+-- | A 'String' without leading and trailing spaces
 trim :: String -> String
 trim ln = dropWhileEnd isSpace (dropWhile isSpace ln)
 
 
+data Token
+    -- | The 'text' token represents a part of text
+    = Text String
+    -- | The 'BeginSection' token represents the beginning of a new
+    -- section, which corresponds to an increase in indentation or an
+    -- unmatched decrease in indentation.
+    | BeginSection
+    -- | The 'EndSection' token represents the end of a section, which
+    -- corresponds to a decrease in indentation.
+    | EndSection
+      deriving (Show)
+
+
+-- | A 'List' of 'BeginSection' and 'EndSection' 'Token's issued
+-- according the indentation stack and current indentation
 section :: [Int] -> Int -> [Token]
 section [] _ = error "section: idns is empty"
 section (idn1:idns) idn2 =
@@ -45,35 +64,38 @@ section (idn1:idns) idn2 =
       GT -> EndSection:section (dropWhile (> idn1) idns) idn2
 
 
+-- | A 'List' of 'Text' 'Token's preceeded by the appropriate
+-- 'BeginSection' or 'EndSection' 'Token's
 reduce :: [Int] -> String -> [Token]
 reduce idns ln = section idns (indentation ln) ++ [Text $ trim ln]
 
 
-push :: Eq a => a -> [a] -> [a]
-push x (y:ys) | x /= y = x:y:ys
-push _ xs = xs
+-- | Tokenizes a string
+classify :: String -> [Token]
+classify lns =
+    classify' [0] $ lines lns
+        where classify' _ [] = []
+              classify' _ [ln] | all isSpace ln = []
+              classify' idns (ln1:lns) | all isSpace ln1 = classify' idns lns
+              classify' idns [ln] = reduce idns ln
+              classify' idns (ln1:ln2:lns)
+                  | all isSpace ln2 = reduce idns ln1 ++ classify' (push idn1 (dropWhile (> idn1) idns)) lns
+                  | idn1 < idn2 = reduce idns ln1 ++ classify' (push idn1 (dropWhile (> idn1) idns)) (ln2:lns)
+                  | idn1 > idn2 = reduce idns ln1 ++ classify' (push idn1 idns) (ln2:lns)
+                  | otherwise = classify' idns (join ln1 ln2:lns)
+                  where idn1 = indentation ln1
+                        idn2 = indentation ln2
 
 
-classify :: [Int] -> [String] -> [Token]
-classify _ [] = []
-classify _ [ln] | all isSpace ln = []
-classify idns (ln1:lns) | all isSpace ln1 = classify idns lns
-classify idns [ln] = reduce idns ln
-
-classify idns (ln1:ln2:lns)
-    | all isSpace ln2 = reduce idns ln1 ++ classify (push idn1 (dropWhile (> idn1) idns)) lns
-    | idn1 < idn2 = reduce idns ln1 ++ classify (push idn1 (dropWhile (> idn1) idns)) (ln2:lns)
-    | idn1 > idn2 = reduce idns ln1 ++ classify (push idn1 idns) (ln2:lns)
-    | otherwise = classify idns (join ln1 ln2:lns)
-    where idn1 = indentation ln1
-          idn2 = indentation ln2
-
-
-
-data Document = Heading String
-              | Paragraph String
-              | Content [Document]
-              | Section Document
+data Document
+    -- | A 'Heading' in a 'Document'
+    = Heading String
+    -- | A 'Paragraph' in a 'Document'
+    | Paragraph String
+    -- | A sequence of 'Document' elements
+    | Content [Document]
+    -- | A subsection in a 'Document'
+    | Section Document
 
 instance Show Document where
     show (Heading str) = "Heading = " ++ str
@@ -82,6 +104,7 @@ instance Show Document where
     show (Section doc) = "begin\n" ++ show doc ++ "\nend"
 
 
+-- | Parses a sequence of 'Token's into a 'Document'
 docify :: [Token] -> Document
 docify tokens =
     loop tokens [[]]
@@ -198,7 +221,7 @@ filterLines str = [ ln | ln <- lines str, (trim ln) /= "" ]
 
 fmark :: Flag -> String -> IO String
 fmark fmt contents =
-    formatFn $ classify [0] $ lines contents
+    formatFn $ classify contents
     where formatFn =
               case fmt of
                 OutputDoc -> return . show . docify
@@ -210,7 +233,7 @@ fmark fmt contents =
 
 fmarkFp :: Flag -> String -> String -> IO ()
 fmarkFp OutputPdf contents fp =
-    formatFn $ classify [0] $ lines contents
+    formatFn $ classify contents
     where formatFn = (pdflatex fp) . docToLatex . docify
 
 
