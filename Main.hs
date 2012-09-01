@@ -31,7 +31,7 @@ indentation ln = length $ takeWhile isSpace ln
 -- | A 'String' that results from joining two 'String's with a single
 -- space in between.
 join :: String -> String -> String
-join ln1 ln2 = (dropWhileEnd isSpace ln1) ++ " " ++ (dropWhile isSpace ln2)
+join ln1 ln2 = (dropWhileEnd isSpace ln1) ++ "\n" ++ (dropWhile isSpace ln2)
 
 
 -- | The 'List' with an additional element only if that element is not
@@ -184,18 +184,18 @@ docToLatex doc =
                         "\\begin{document}",
                         loop 0 doc,
                         "\\end{document}"]
-    where ltStr str =
-              concatMap (\c -> if c == '#' then "\\#" else [c]) str
-
-          ltBold str =
-              "\\textbf{" ++ ltStr str ++ "}"
+    where ltStr str newlines =
+              concatMap sub str
+              where sub '#' = "\\#"
+                    sub '\n' | newlines = "\\\\"
+                    sub c = [c]
 
           ltSection lvl str
-              | lvl < 3 = "\\" ++ (concat (replicate lvl "sub")) ++ "section{" ++ ltStr str ++ "}"
-              | lvl == 3 = "\\paragraph{" ++ ltStr str ++ "}"
-              | lvl == 4 = "\\subparagraph{" ++ ltStr str ++ "}"
+              | lvl < 3 = "\\" ++ (concat (replicate lvl "sub")) ++ "section{" ++ ltStr str True ++ "}"
+              | lvl == 3 = "\\paragraph{" ++ ltStr str True ++ "}"
+              | lvl == 4 = "\\subparagraph{" ++ ltStr str True ++ "}"
 
-          ltParagraph str = ltStr str
+          ltParagraph str = ltStr str False
 
           loop lvl (Heading str) = ltSection lvl str
           loop lvl (Paragraph str) = ltParagraph str
