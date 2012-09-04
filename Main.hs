@@ -255,6 +255,7 @@ docToLatex mstyle doc =
                       _ -> def "maketitle"
     in
       seq [comArgs "documentclass" ["a4paper"] "article",
+           comArgs "usepackage" ["utf8"] "inputenc",
            prop (com "title") title,
            prop (com "author") author,
            prop (com "date") date,
@@ -266,30 +267,29 @@ docToLatex mstyle doc =
           properties (Content _ docs) = concatMap properties docs
           properties (Section _ doc) = properties doc
           
-          lit newlines str =
-              concatMap sub str
-              where sub '#' = "\\#"
-                    sub '\n' | newlines = "\\\\"
-                    sub c = [c]
+          lit str =
+              concatMap lit' str
+              where lit' '#' = "\\#"
+                    lit' c = [c]
 
           nls str =
               concatMap nls' str
               where nls' '\n' = "\\\\"
                     nls' c = [c]
 
-          def id = "\\" ++ id
-          com id str = "\\" ++ id ++ "{" ++ lit False str ++ "}"
-          comArgs id args str = "\\" ++ id ++ "[" ++ intercalate "," args ++ "]{" ++ lit False str ++ "}"
-          env id str = "\\begin{" ++ id ++ "}\n" ++ lit False str ++ "\n\\end{" ++ id ++ "}"
+          def id = "\\" ++ lit id
+          com id str = "\\" ++ lit id ++ "{" ++ lit str ++ "}"
+          comArgs id args str = "\\" ++ lit id ++ "[" ++ (intercalate "," $ map lit args) ++ "]{" ++ lit str ++ "}"
+          env id str = "\\begin{" ++ lit id ++ "}\n" ++ lit str ++ "\n\\end{" ++ lit id ++ "}"
 
-          prop fn mp = maybe "" (\str -> fn $ lit False str) mp
+          prop fn mp = maybe "" (\str -> fn $ lit str) mp
 
           sec lvl str
-              | lvl < 3 = com (concat (replicate lvl "sub") ++ "section") $ lit True str
-              | lvl == 3 = com "paragraph" $ lit True str
-              | lvl == 4 = com "subparagraph" $ lit True str
+              | lvl < 3 = com (concat (replicate lvl "sub") ++ "section") $ nls str
+              | lvl == 3 = com "paragraph" $ nls str
+              | lvl == 4 = com "subparagraph" $ nls str
 
-          par = lit False
+          par = lit
 
           seq = intercalate "\n\n" . filter (\ln -> trim ln /= "")
 
