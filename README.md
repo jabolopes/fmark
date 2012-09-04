@@ -98,7 +98,11 @@ and you can simply output the LaTeX formatting
 
     $ fmark -l example
 
-These options can also be combined with styles if necessary.
+These options can also be combined with styles if necessary.  Finally,
+in case you forget any of these options you can always use the help
+option
+
+    $ fmark --help
 
 Markup
 ------
