@@ -85,15 +85,17 @@ you should have a
 '[example.pdf](http://github.com/jabolopes/fmark/blob/master/doc/examples/example.pdf?raw=true)'
 PDF file which you can open with your preferred PDF viewer.
 
-Formats
--------
-
-Let's take a look at other options.  You can generate a PDF without
-styling
+You can also generate a [PDF without styling](http://github.com/jabolopes/fmark/blob/master/doc/examples/exampleNoStyle.pdf?raw=true)
+by omitting the style argument
 
     $ fmark -p example
 
-you can change the output format to XML
+Formats
+-------
+
+Let's take a look at other formats and command line options.
+
+You can change the output format to XML
 
     $ fmark -x example
 
