@@ -160,12 +160,26 @@ weaveStyle doc style =
                     ++ prefix "  " str ++ "\n"
                     ++ desc ++ "\n"
                     ++ prefix "  " sty
-          
-          loop doc@(Heading _ str) (Heading _ sty) =
-              let errs = case length (lines str) == length (lines sty) of
-                           True -> []
-                           _ -> [msg "Heading" str "does not match style" sty] in
-              (Heading (Just sty) str, errs)
+
+          loop :: Document -> Document -> (Document, [String])
+          loop (Heading _ str) (Heading _ sty) =
+              let strLns = lines str
+                  styLns = lines sty
+                  errs = if length strLns == length styLns then
+                             []
+                         else
+                             [msg "Heading" str "does not match style" sty]
+                  (withStyLns, noStyLns) = splitAt (length styLns) strLns
+                  hds = [ Heading (Just sty) str | str <- withStyLns | sty <- styLns ]
+                        ++
+                        case noStyLns of
+                          [] -> []
+                          _ -> [Heading Nothing $ unlines noStyLns]
+              in
+                case hds of
+                  [] -> error "weaveStyle: loop: headings are empty"
+                  [hd] -> (hd, errs)
+                  _ -> (Content Nothing hds, errs)
 
           loop (Paragraph _ str) (Paragraph _ sty) =
               -- currently, paragraph newlines are striped before getting here...
@@ -174,8 +188,8 @@ weaveStyle doc style =
               (Paragraph (Just (init sty)) str, [])
 
           loop (Content _ docs1) (Content _ docs2) =
-              let (docsSty, docsNoSty) = splitAt (length docs2) docs1 in
-              let (docsSty', errss) = unzip [ loop doc1 doc2 | doc1 <- docsSty | doc2 <- docs2 ] in
+              let (docsSty, docsNoSty) = splitAt (length docs2) docs1
+                  (docsSty', errss) = unzip [ loop doc1 doc2 | doc1 <- docsSty | doc2 <- docs2 ] in
               (Content Nothing (docsSty' ++ docsNoSty), concat errss)
 
           loop (Section _ doc1) (Section _ doc2) =
@@ -231,27 +245,50 @@ docToXml doc =
 
 docToLatex :: Document -> String
 docToLatex doc =
-    intercalate "\n\n" ["\\documentclass[a4paper]{article}",
-                        "\\begin{document}",
-                        loop 0 doc,
-                        "\\end{document}"]
-    where ltStr str newlines =
+    let ps = properties doc 
+        title = lookup "Title" ps
+        author = lookup "Author" ps
+        date = lookup "Date" ps
+        abstract = lookup "Abstract" ps
+    in
+      comArgs "documentclass" ["a4paper"] "article" ++ "\n" ++
+      prop (com "title") title ++
+      prop (com "author") author ++
+      prop (com "date") date ++
+      (env "document" $
+        def "maketitle" ++ "\n" ++
+        prop (env "abstract") abstract ++
+        (intercalate "\n" $ filterLines $ loop 0 doc))
+    where properties (Heading msty str) = maybe [] (\sty -> [(sty, str)]) msty
+          properties (Paragraph msty str) = maybe [] (\sty -> [(sty, str)]) msty
+          properties (Content _ docs) = concatMap properties docs
+          properties (Section _ doc) = properties doc
+          
+          ltStr newlines str =
               concatMap sub str
               where sub '#' = "\\#"
                     sub '\n' | newlines = "\\\\"
                     sub c = [c]
 
-          ltSection lvl str
-              | lvl < 3 = "\\" ++ (concat (replicate lvl "sub")) ++ "section{" ++ ltStr str True ++ "}"
-              | lvl == 3 = "\\paragraph{" ++ ltStr str True ++ "}"
-              | lvl == 4 = "\\subparagraph{" ++ ltStr str True ++ "}"
+          def id = "\\" ++ id
+          com id str = "\\" ++ id ++ "{" ++ str ++ "}"
+          comArgs id args str = "\\" ++ id ++ "[" ++ intercalate "," args ++ "]{" ++ str ++ "}"
+          env id str = "\\begin{" ++ id ++ "}\n" ++ str ++ "\n\\end{" ++ id ++ "}"
 
-          ltParagraph str = ltStr str False
+          prop fn mp = maybe "" (\str -> fn (ltStr False str) ++ "\n") mp
 
-          loop lvl (Heading _ str) = ltSection lvl str
-          loop lvl (Paragraph _ str) = ltParagraph str
+          sec lvl str
+              | lvl < 3 = com (concat (replicate lvl "sub") ++ "section") $ ltStr True str
+              | lvl == 3 = com "paragraph" $ ltStr True str
+              | lvl == 4 = com "subparagraph" $ ltStr True str
+
+          par = ltStr False
+
+          loop lvl (Heading Nothing str) = sec lvl str
+          loop _ (Paragraph Nothing str) = par str
           loop lvl (Content _ docs) = intercalate "\n\n" $ map (loop lvl) docs
           loop lvl (Section _ doc) = loop (lvl + 1) doc
+          loop _ _ = ""
 
 
 pdflatex :: FilePath -> String -> IO ()
@@ -281,8 +318,6 @@ data Flag
     | OutputLatex
     -- | Output to a PDF file using LaTeX format and 'pdflatex'.
     | OutputPdf
-    -- | Output to 'stdout' the 'Token's of the input.
-    | OutputTokens
     -- | Output to 'stdout' in XML format.
     | OutputXml
     -- | Display usage information.
@@ -291,55 +326,44 @@ data Flag
       deriving (Eq, Show)
 
 
--- | Run friendly markup with the specified output format and input
--- 'String'. The output is a 'String'.
-fmark :: Flag -> String -> IO String
-fmark fmt contents =
-    formatFn $ classify contents
-    where formatFn =
-              case fmt of
-                OutputDoc -> return . show . docify
-                OutputLatex -> return . docToLatex . docify
-                OutputPdf -> error "cannot use stdin with PDF output format"
-                OutputTokens -> return . intercalate "\n" . map show
-                OutputXml -> return . docToXml . docify
-
-fmarkStyle fmt hIn hOut styleFp =
-    withFile styleFp ReadMode $
-      \hStyle -> do style <- hGetContents hStyle
-                    let styleDoc = docify $ classify style
-                    
-                    contents <- hGetContents hIn
-                    let doc = docify $ classify contents
-
-                    let (doc', errs) = weaveStyle doc styleDoc
-                    putStrLn $ show doc'
-                    case errs of
-                      [] -> return ()
-                      _ -> do hPutStrLn stderr "Style warnings:"
-                              mapM_ (hPutStrLn stderr) errs
+formatFn :: Flag -> Document -> String
+formatFn OutputDoc = show
+formatFn OutputLatex = docToLatex
+formatFn OutputPdf = formatFn OutputLatex
+formatFn OutputXml = docToXml
+formatFn fmt = error $ "unhandled case: " ++ show fmt
 
 
--- | Run friendly markup with the specified output format and input
--- 'String'. The output is written to the file specified by
--- 'FilePath'.
-fmarkFp :: Flag -> String -> FilePath -> IO ()
-fmarkFp OutputPdf contents fp =
-    formatFn $ classify contents
-    where formatFn = (pdflatex fp) . docToLatex . docify
+formatH :: Flag -> Either Handle FilePath -> String -> IO ()
+formatH OutputPdf (Left _) = error "cannot use stdin with PDF output format"
+formatH OutputPdf (Right fp) = pdflatex fp
+formatH fmt (Left hOut) = hPutStrLn hOut
+formatH fmt (Right fp) = \str -> withFile fp WriteMode $ \hOut -> formatH fmt (Left hOut) str
 
 
--- | Run friendly markup with the specified output format and input
--- 'Handle'. The result is 'Either' written to an output 'Handle' or
--- to the file specified by 'FilePath'.
-fmarkH :: Flag -> Handle -> Either Handle FilePath -> IO ()
-fmarkH fmt hIn (Left hOut) =
+fmark :: Flag -> String -> Maybe String -> (String, [String])
+fmark fmt contents Nothing =
+    (formatFn fmt $ docify $ classify contents, [])
+
+fmark fmt contents (Just style) =
+    let doc = docify $ classify contents in
+    let styleDoc = docify $ classify style in
+    let (doc', errs) = weaveStyle doc styleDoc in
+    (formatFn fmt doc', errs)
+
+
+fmarkH :: Flag -> Handle -> Either Handle FilePath -> Maybe Handle -> IO ()
+fmarkH fmt hIn eOut mstyle =
     do contents <- hGetContents hIn
-       fmark fmt contents >>= hPutStrLn hOut
-
-fmarkH fmt hIn (Right fp) =
-    do contents <- hGetContents hIn
-       fmarkFp fmt contents fp
+       mstyle <- maybe (return Nothing)
+                       (\hStyle -> hGetContents hStyle >>= return . Just)
+                       mstyle
+       let (str, errs) = fmark fmt contents mstyle
+       formatH fmt eOut str
+       case errs of
+         [] -> return ()
+         _ -> do hPutStrLn stderr "Style warnings:"
+                 mapM_ (hPutStrLn stderr) errs
 
 
 -- | Command line options.
@@ -347,7 +371,6 @@ options = [Option ['d'] ["doc"] (NoArg OutputDoc) "Output doc",
            Option ['l'] ["latex"] (NoArg OutputLatex) "Output latex",
            Option ['p'] ["pdf"] (NoArg OutputPdf) "Output PDF",
            Option ['s'] ["style"] (ReqArg Style "style-name") "Style",
-           Option ['t'] ["token"] (NoArg OutputTokens) "Output tokens",
            Option ['x'] ["xml"] (NoArg OutputXml) "Output xml",
            Option ['h'] ["help"] (NoArg Help) "Display help"]
 
@@ -370,22 +393,25 @@ main =
           
           processOpts opts _ | Help `elem` opts = putUsage
           processOpts opts nonOpts =
-              case mstyle of
-                Nothing -> hInFn $ \hIn -> fmarkH fmt hIn eOut
-                Just (Style style) -> hInFn $ \hIn -> fmarkStyle fmt hIn eOut style
-              where fmt = case opts of
-                            [] -> OutputDoc
-                            _ -> last opts
+              styleFn $ \mstyle -> (inFn $ \hIn -> fmarkH fmt hIn eOut mstyle)
+              where revOpts = reverse opts
+                    
+                    fmt = fmt' revOpts
+                        where fmt' [] = OutputDoc
+                              fmt' (Help:opts) = fmt' opts
+                              fmt' ((Style _):opts) = fmt' opts
+                              fmt' (flag:opts) = flag
 
-                    mstyle = find (\x -> case x of
-                                           Style _ -> True
-                                           _ -> False) $ reverse opts
+                    styleFn = style' revOpts
+                        where style' [] = \fn -> fn Nothing
+                              style' ((Style fp):opts) = \fn -> withFile fp ReadMode $ \h -> fn $ Just h
+                              style' (_:opts) = style' opts
 
-                    hInFn = case nonOpts of
-                              [] -> \fn -> fn stdin
-                              _ -> withFile (last nonOpts) ReadMode
+                    inFn = case nonOpts of
+                             [] -> \fn -> fn stdin
+                             _ -> withFile (last nonOpts) ReadMode
 
                     eOut = case nonOpts of
-                             [] -> Left stdout
-                             _ | fmt /= OutputPdf -> Left stdout
-                             _ -> Right $ last nonOpts
+                             [] | fmt == OutputPdf -> error "cannot use stdin with PDF output format"
+                             _ | fmt == OutputPdf -> Right $ last nonOpts
+                             _ -> Left stdout
