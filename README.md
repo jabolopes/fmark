@@ -112,31 +112,31 @@ end in a punctuation symbol (e.g., period, exclamation or
 interrogation marks), they are considered paragraphs.  Otherwise, they
 are considered headings.  For example, the following is a paragraph
 
-> Hi! This is a paragraph which
-> happens to spans multiple lines.
+    Hi! This is a paragraph which
+    happens to spans multiple lines.
 
 but the following is a heading
 
-> Hi! This is a heading which
-> also spans multiple lines
+    Hi! This is a heading which
+    also spans multiple lines
 
 The second rule is for sections and subsections: increase in
 indentation causes a new subsection to be created which spans until
 that indentation is decreased.  For example, the following is a
 section with two subsections and a subsubsection.
 
-> This is a section.
->
->   This is a subsection.
->
->     This is a subsubsection.
->
->   Back to the subsection.
->
-> And we are back on the first section.
+    This is a section.
 
-Other rules will be added in the future for enumerations, hyphenized
-lists, and footnotes.
+        This is a subsection.
+
+            This is a subsubsection.
+
+        Back to the subsection.
+
+    And we are back on the first section.
+
+Other rules will be added in the future for enumerations, lists, and
+footnotes.
 
 Installation
 ------------
