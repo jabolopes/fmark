@@ -40,37 +40,37 @@ Let's try out a real example.  Copy the following text into a file
 named 'example' or, if you have downloaded the source code or cloned
 the repository, you can find this file in the 'examples' directory.
 
-> My first Fmark document
-> José Lopes
-> Sunday, Sep 4 2012
->
->   Fmark (Friendly Markup) is a very simple markup language without
->   syntax, capable of producing PDF and XML files, and very simple
->   document but sophisticated styling.
->
-> The first section
->
-> Hello, welcome to Fmark.
-> This is the first section of your document.
->
->   The first subsection
->
->   It is very simple to create subsections. No special characters are
->   needed. Simply use indentation to indicate the beginning and end of
->   your sections.
->
->   The second subsection
->
->   Another subsection with a different title. Again, very simple.
+    My first Fmark document
+    José Lopes
+    Sunday, Sep 4 2012
+
+        Fmark (Friendly Markup) is a very simple markup language without
+        syntax, capable of producing PDF and XML files, and very simple
+        document but sophisticated styling.
+
+    The first section
+
+    Hello, welcome to Fmark.
+    This is the first section of your document.
+
+        The first subsection
+
+	It is very simple to create subsections. No special characters are
+	needed. Simply use indentation to indicate the beginning and end of
+	your sections.
+
+	The second subsection
+
+	Another subsection with a different title. Again, very simple.
 
 Copy the following text into 'example.style'.  Again, this file is
 also available in the 'examples' directory.
 
-> Title
-> Author
-> Date
->
->   Abstract.
+    Title
+    Author
+    Date
+
+        Abstract.
 
 Ok! So the first document is the content and the second document is
 the style.  As you can see, there are some similarities between the
