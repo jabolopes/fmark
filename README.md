@@ -158,7 +158,7 @@ build application
 
     $ cabal build
 
-compile documentation documentation
+compile documentation
 
     $ cabal haddock --executables
 
