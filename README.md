@@ -154,7 +154,6 @@ install following these steps, making sure that your package list is
 updated
 
     $ cabal update
-
     $ cabal install fmark
 
 Installation from source
