@@ -3,6 +3,7 @@ module Main where
 
 import Prelude hiding (lex)
 
+import Control.Monad ((>=>))
 import Control.Monad.State hiding (join)
 
 import Data.Char
@@ -29,8 +30,8 @@ filterLines lns = [ ln | ln <- lns, trim ln /= "" ]
 --
 -- > flatten "hello\ngoodbye" == "hello,goodbye"
 flatten :: String -> String
-flatten str =
-    map loop str
+flatten =
+    map loop
     where loop '\n' = ','
           loop c = c
 
@@ -48,7 +49,7 @@ indentation ln = length $ takeWhile isSpace ln
 --
 -- > join "hello \n" "\t goodbye" == "hello\ngoodbye"
 join :: String -> String -> String
-join str1 str2 = (dropWhileEnd isSpace str1) ++ "\n" ++ (dropWhile isSpace str2)
+join str1 str2 = dropWhileEnd isSpace str1 ++ "\n" ++ dropWhile isSpace str2
 
 
 -- | 'prefix' @pre str@ prepends all lines in 'str' with 'pre'.
@@ -57,10 +58,10 @@ join str1 str2 = (dropWhileEnd isSpace str1) ++ "\n" ++ (dropWhile isSpace str2)
 prefix :: String -> String -> String
 prefix pre str =
     pre ++ prefix' str
-    where prefix' str =
+    where prefix' =
               concatMap (\c -> case c of
                                  '\n' -> '\n':pre
-                                 _ -> [c]) str
+                                 _ -> [c])
 
 
 -- | 'push' @x xs@ adds @x@ to @xs@ only if the first element in @xs@
@@ -78,7 +79,7 @@ push _ xs = xs
 --
 -- > trim "\t hello \n" == "hello"
 trim :: String -> String
-trim = dropWhileEnd isSpace . (dropWhile isSpace)
+trim = dropWhileEnd isSpace . dropWhile isSpace
 
 
 -- | 'Token' is an unstructured representation of the input.
@@ -162,7 +163,7 @@ docify tks =
           loop [] [doc] = Content Nothing $ reverse doc
           loop [] st = loop [EndSection] st
 
-          loop ((Text str):tks) (top:st) =
+          loop (Text str:tks) (top:st) =
               let cons = if isPunctuation $ last str then Paragraph else Heading in
               loop tks ((cons Nothing str:top):st)
 
@@ -170,7 +171,7 @@ docify tks =
               loop tks ([]:st)
 
           loop (EndSection:tks) (top:bot:st) =
-              loop tks (((Section Nothing $ Content Nothing $ reverse top):bot):st)
+              loop tks ((Section Nothing (Content Nothing $ reverse top):bot):st)
 
           loop tks st =
               error $ "\n\n\tloop: unhandled case" ++
@@ -306,22 +307,22 @@ docToLatex mstyle doc =
           properties (Content _ docs) = concatMap properties docs
           properties (Section _ doc) = properties doc
           
-          lit str =
-              concatMap lit' str
+          lit =
+              concatMap lit'
               where lit' '#' = "\\#"
                     lit' c = [c]
 
-          nls str =
-              concatMap nls' str
+          nls =
+              concatMap nls'
               where nls' '\n' = "\\\\"
                     nls' c = [c]
 
-          def id = "\\" ++ lit id
+          def id = '\\':lit id
           com id str = "\\" ++ lit id ++ "{" ++ lit str ++ "}"
-          comArgs id args str = "\\" ++ lit id ++ "[" ++ (intercalate "," $ map lit args) ++ "]{" ++ lit str ++ "}"
+          comArgs id args str = "\\" ++ lit id ++ "[" ++ intercalate "," (map lit args) ++ "]{" ++ lit str ++ "}"
           env id str = "\\begin{" ++ lit id ++ "}\n" ++ lit str ++ "\n\\end{" ++ lit id ++ "}"
 
-          prop fn mp = maybe "" (\str -> fn $ lit str) mp
+          prop fn = maybe "" $ fn . lit
 
           sec lvl str
               | lvl < 3 = com (concat (replicate lvl "sub") ++ "section") $ nls str
@@ -344,18 +345,18 @@ docToLatex mstyle doc =
 -- output PDF.
 pdflatex :: FilePath -> String -> IO ()
 pdflatex outFp contents =
-    do withTemporaryDirectory "fmark" $
-         \outDir -> withFile "/dev/null" WriteMode $
-                    \hNull -> do (Just hIn, _, _, h) <- createProcess
-                                                        (proc "pdflatex" ["-output-directory=" ++ outDir,
-                                                                          "--jobname=" ++ outFname])
-                                                        { std_in = CreatePipe,
-                                                          std_out = UseHandle hNull,
-                                                          std_err = UseHandle hNull }
-                                 mapM_ (hPutStrLn hIn) $ filterLines $ lines contents
-                                 hClose hIn
-                                 waitForProcess h
-                                 copyFile (pdfFp outDir) (addExtension (dropExtensions outFp) "pdf")
+    withTemporaryDirectory "fmark" $
+      \outDir -> withFile "/dev/null" WriteMode $
+                   \hNull -> do (Just hIn, _, _, h) <- createProcess
+                                                       (proc "pdflatex" ["-output-directory=" ++ outDir,
+                                                                         "--jobname=" ++ outFname])
+                                                       { std_in = CreatePipe,
+                                                         std_out = UseHandle hNull,
+                                                         std_err = UseHandle hNull }
+                                mapM_ (hPutStrLn hIn) $ filterLines $ lines contents
+                                hClose hIn
+                                waitForProcess h
+                                copyFile (pdfFp outDir) (addExtension (dropExtensions outFp) "pdf")
     where outFname = "texput"
           pdfFp fp = combine fp $ addExtension outFname "pdf"
 
@@ -418,7 +419,7 @@ fmarkH :: Flag -> Handle -> Either Handle FilePath -> Maybe Handle -> IO ()
 fmarkH fmt hIn eOut mstyle =
     do contents <- hGetContents hIn
        mstyle <- maybe (return Nothing)
-                       (\hStyle -> hGetContents hStyle >>= return . Just)
+                       (hGetContents >=> (return . Just))
                        mstyle
        let (str, errs) = fmark fmt contents mstyle
        formatH fmt eOut str
@@ -429,12 +430,12 @@ fmarkH fmt hIn eOut mstyle =
 
 
 -- | 'options' represents the command line options.
-options = [Option ['d'] ["doc"] (NoArg OutputDoc) "Output doc",
-           Option ['l'] ["latex"] (NoArg OutputLatex) "Output latex",
-           Option ['p'] ["pdf"] (NoArg OutputPdf) "Output PDF",
-           Option ['s'] ["style"] (ReqArg Style "style-name") "Style",
-           Option ['x'] ["xml"] (NoArg OutputXml) "Output xml",
-           Option ['h'] ["help"] (NoArg Help) "Display help"]
+options = [Option "d" ["doc"] (NoArg OutputDoc) "Output doc",
+           Option "l" ["latex"] (NoArg OutputLatex) "Output latex",
+           Option "p" ["pdf"] (NoArg OutputPdf) "Output PDF",
+           Option "s" ["style"] (ReqArg Style "style-name") "Style",
+           Option "x" ["xml"] (NoArg OutputXml) "Output xml",
+           Option "h" ["help"] (NoArg Help) "Display help"]
 
 
 -- | 'main'.
@@ -461,12 +462,12 @@ main =
                     fmt = fmt' revOpts
                         where fmt' [] = OutputDoc
                               fmt' (Help:opts) = fmt' opts
-                              fmt' ((Style _):opts) = fmt' opts
+                              fmt' (Style _:opts) = fmt' opts
                               fmt' (flag:opts) = flag
 
                     styleFn = style' revOpts
                         where style' [] = \fn -> fn Nothing
-                              style' ((Style fp):opts) = \fn -> withFile fp ReadMode $ \h -> fn $ Just h
+                              style' (Style fp:opts) = \fn -> withFile fp ReadMode $ \h -> fn $ Just h
                               style' (_:opts) = style' opts
 
                     inFn = case nonOpts of
