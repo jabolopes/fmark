@@ -19,28 +19,41 @@ import System.Process
 import System.Unix.Directory hiding (find)
 
 
--- | The lines of a 'String' without empty lines.
+-- | 'filterLines' @lns@ filters empty lines and lines containing only
+-- space characters from @lns@.
 filterLines :: [String] -> [String]
 filterLines lns = [ ln | ln <- lns, trim ln /= "" ]
 
 
+-- | 'flatten' @str@ replaces newlines in @str@ with commas.
+--
+-- > flatten "hello\ngoodbye" == "hello,goodbye"
+flatten :: String -> String
 flatten str =
     map loop str
     where loop '\n' = ','
           loop c = c
 
 
--- | The number of space characters at the begining of a 'String'.
+-- | 'indentation' @ln@ is the number of space characters at the
+-- begining of @ln@.
+--
+-- > indentation "\t hello" == 2
 indentation :: String -> Int
 indentation ln = length $ takeWhile isSpace ln
 
 
--- | A 'String' that results from joining two 'String's with a single
--- space in between.
+-- | 'join' @str1 str2@ appends @str1@ and @str2@ ensuring that is
+-- only a single newline space character between them.
+--
+-- > join "hello \n" "\t goodbye" == "hello\ngoodbye"
 join :: String -> String -> String
-join ln1 ln2 = (dropWhileEnd isSpace ln1) ++ "\n" ++ (dropWhile isSpace ln2)
+join str1 str2 = (dropWhileEnd isSpace str1) ++ "\n" ++ (dropWhile isSpace str2)
 
 
+-- | 'prefix' @pre str@ prepends all lines in 'str' with 'pre'.
+--
+-- > prefix "->" "hello\ngoodbye" == "->hello\n->goodbye"
 prefix :: String -> String -> String
 prefix pre str =
     pre ++ prefix' str
@@ -50,33 +63,41 @@ prefix pre str =
                                  _ -> [c]) str
 
 
--- | The 'List' with an additional element only if that element is not
--- equal to the first element in the original 'List'.
+-- | 'push' @x xs@ adds @x@ to @xs@ only if the first element in @xs@
+-- is different from @x@.
+--
+-- > push 1 [2,3] == [1,2,3]
+-- > push 1 [1,3] == [1,3]
 push :: Eq a => a -> [a] -> [a]
 push x (y:ys) | x /= y = x:y:ys
 push _ xs = xs
 
 
--- | A 'String' without leading and trailing space characters.
+-- | 'trim' @str@ removes leading and trailing space characters from
+-- @str@.
+--
+-- > trim "\t hello \n" == "hello"
 trim :: String -> String
-trim str = dropWhileEnd isSpace (dropWhile isSpace str)
+trim = dropWhileEnd isSpace . (dropWhile isSpace)
 
 
+-- | 'Token' is an unstructured representation of the input.
 data Token
-    -- | The 'Text' token corresponds to successive lines of text
-    -- joined together.
+    -- | 'Text' corresponds to successive lines of text joined
+    -- together.
     = Text String
-    -- | The beginning of a new section corresponds to an increase in
-    -- indentation or an unmatched decrease in indentation.
+    -- | 'BeginSection' represents the beginning of a new section,
+    -- i.e., increase in indentation or an unmatched decrease in indentation.
     | BeginSection
-    -- | The end of a section corresponds to a decrease in
-    -- indentation.
+    -- | 'EndSection' represents the end of a section, i.e., a
+    -- decrease in indentation.
     | EndSection
       deriving (Show)
 
 
--- | A 'List' of 'BeginSection' and 'EndSection' 'Token's issued
--- according the indentation stack and current indentation.
+-- | 'section' @idns idn@ is the 'List' of 'BeginSection' and
+-- 'EndSection' 'Token's issued according the indentation stack @idns@
+-- and current indentation @idn@.
 section :: [Int] -> Int -> [Token]
 section [] _ = error "section: idns is empty"
 section (idn1:idns) idn2 =
@@ -86,16 +107,17 @@ section (idn1:idns) idn2 =
       GT -> EndSection:section (dropWhile (> idn1) idns) idn2
 
 
--- | A 'List' of 'Text' 'Token's preceeded by the appropriate
--- 'BeginSection' or 'EndSection' 'Token's.
+-- | 'reduce' @idns ln@ is the 'List' containing the 'Text' 'Token'
+-- holding @ln@ preceeded by the appropriate section 'Token's as
+-- issued by 'section' according to the indentation stack @idns@.
 reduce :: [Int] -> String -> [Token]
 reduce idns ln = section idns (indentation ln) ++ [Text $ trim ln]
 
 
--- | Tokenizes a string.
+-- | 'classify' @str@ is the 'List' of 'Token's of @str@.
 classify :: String -> [Token]
-classify lns =
-    classify' [0] $ lines lns
+classify str =
+    classify' [0] $ lines str
         where classify' _ [] = []
               classify' _ [ln] | all isSpace ln = []
               classify' idns (ln1:lns) | all isSpace ln1 = classify' idns lns
@@ -109,14 +131,18 @@ classify lns =
                         idn2 = indentation ln2
 
 
+-- | 'Document' is a structured representation of the input.
 data Document
-    -- | A 'Heading' in a 'Document'.
+    -- | 'Heading' is a 'Document' part with a style 'String' and
+    -- heading content.
     = Heading (Maybe String) String
-    -- | A 'Paragraph' in a 'Document'.
+    -- | 'Paragraph' is a 'Document' part with a style 'String' and
+    -- paragraph content.
     | Paragraph (Maybe String) String
-    -- | A sequence of 'Document' elements.
+    -- | 'Content' is a 'Document' part that represents a sequence of
+    -- 'Document's.
     | Content (Maybe String) [Document]
-    -- | A subsection in a 'Document'.
+    -- | 'Section' is a 'Document' part that represents a subsection.
     | Section (Maybe String) Document
 
 instance Show Document where
@@ -128,30 +154,31 @@ instance Show Document where
     show (Section _ doc) = "begin\n" ++ show doc ++ "\nend"
 
 
--- | Parses a sequence of 'Token's into a 'Document'.
+-- | 'docify' @tks@ parses the sequence of 'Token's @tks@ into a 'Document'.
 docify :: [Token] -> Document
-docify tokens =
-    loop tokens [[]]
+docify tks =
+    loop tks [[]]
     where loop :: [Token] -> [[Document]] -> Document
           loop [] [doc] = Content Nothing $ reverse doc
           loop [] st = loop [EndSection] st
 
-          loop ((Text str):tokens) (top:st) =
+          loop ((Text str):tks) (top:st) =
               let cons = if isPunctuation $ last str then Paragraph else Heading in
-              loop tokens ((cons Nothing str:top):st)
+              loop tks ((cons Nothing str:top):st)
 
-          loop (BeginSection:tokens) st =
-              loop tokens ([]:st)
+          loop (BeginSection:tks) st =
+              loop tks ([]:st)
 
-          loop (EndSection:tokens) (top:bot:st) =
-              loop tokens (((Section Nothing $ Content Nothing $ reverse top):bot):st)
+          loop (EndSection:tks) (top:bot:st) =
+              loop tks (((Section Nothing $ Content Nothing $ reverse top):bot):st)
 
-          loop tokens st =
+          loop tks st =
               error $ "\n\n\tloop: unhandled case" ++
-                      "\n\n\t tokens = " ++ show tokens ++
+                      "\n\n\t tks = " ++ show tks ++
                       "\n\n\t st = " ++ show st ++ "\n\n"
 
-
+-- | 'weaveStyle' @doc style@ combines content 'Document' @doc@ and
+-- style 'Document' @style@ in a single 'Document'.
 weaveStyle :: Document -> Document -> (Document, [String])
 weaveStyle doc style =
     loop doc style
@@ -182,7 +209,7 @@ weaveStyle doc style =
                   _ -> (Content Nothing hds, errs)
 
           loop (Paragraph _ str) (Paragraph _ sty) =
-              -- currently, paragraph newlines are striped before getting here...
+              -- currently, paragraph newlines are striped before getting here... is this true ?
               let errs | length (lines sty) == 1 = []
                        | otherwise = [msg "Paragraph" str "paragraph styles must be one line" sty] in
               (Paragraph (Just (init sty)) str, [])
@@ -199,16 +226,22 @@ weaveStyle doc style =
           loop doc _ = (doc, [show doc])
               
 
+-- | 'XmlState' is the XML generator state.
 data XmlState = XmlState Int
+
+-- | 'XmlM' is the type of the XML generator 'Monad'.
 type XmlM a = State XmlState a
 
 
+-- | 'getIdn' is a 'Monad' with the current indentation level.
 getIdn :: XmlM Int
 getIdn =
     do XmlState idn <- get
        return idn
 
 
+-- | 'withIdn' @m@ is a 'Monad' that temporarily creates a deeper
+-- indentation level for 'Monad' @m@.
 withIdn :: XmlM a -> XmlM a
 withIdn m =
     do idn <- getIdn
@@ -218,6 +251,9 @@ withIdn m =
        return val
 
 
+-- | 'docToXml' @mstyle doc@ formats a styled 'Document' @doc@ into a
+-- XML 'String', where @mstyle@ specifies the style 'Document' used to
+-- stylize @doc@.
 docToXml :: Maybe Document -> Document -> String
 docToXml _ doc =
     intercalate "\n" ["<xml>", str, "</xml>"]
@@ -243,6 +279,9 @@ docToXml _ doc =
           loop (Section _ doc) = xmlLongTag "section" $ loop doc
 
 
+-- | 'docToLatex' @mstyle doc@ formats a styled 'Document' @doc@ into
+-- a LaTeX 'String', where @mstyle@ specifies the style 'Document'
+-- used to stylize @doc@.
 docToLatex :: Maybe Document -> Document -> String
 docToLatex mstyle doc =
     let ps = properties doc 
@@ -300,6 +339,9 @@ docToLatex mstyle doc =
           loop _ _ = ""
 
 
+-- | 'pdflatex' @outFp contents@ executes the 'pdflatex' 'Process'
+-- with @contents@ as input and @outFp@ as the 'FilePath' for the
+-- output PDF.
 pdflatex :: FilePath -> String -> IO ()
 pdflatex outFp contents =
     do withTemporaryDirectory "fmark" $
@@ -318,8 +360,8 @@ pdflatex outFp contents =
           pdfFp fp = combine fp $ addExtension outFname "pdf"
 
 
--- | Command line flags that specify output format or display usage
--- information.
+-- | 'Flag' represents the command line flags that specify output
+-- format, display usage information, and 'Style' filename.
 data Flag
     -- | Output to 'stdout' in 'Document' format.
     = OutputDoc
@@ -335,6 +377,8 @@ data Flag
       deriving (Eq, Show)
 
 
+-- | 'formatFn' @fmt@ maps the output format @fmt@ into the
+-- appropriate formatter function.
 formatFn :: Flag -> Maybe Document -> Document -> String
 formatFn OutputDoc = const show
 formatFn OutputLatex = docToLatex
@@ -343,6 +387,8 @@ formatFn OutputXml = docToXml
 formatFn fmt = error $ "unhandled case: " ++ show fmt
 
 
+-- | 'formatH' @fmt eOut@ maps the output format @fmt@ and either an
+-- output 'Handle' or a 'FilePath' into the appropriate 'IO' function.
 formatH :: Flag -> Either Handle FilePath -> String -> IO ()
 formatH OutputPdf (Left _) = error "cannot use stdin with PDF output format"
 formatH OutputPdf (Right fp) = pdflatex fp
@@ -350,6 +396,10 @@ formatH fmt (Left hOut) = hPutStrLn hOut
 formatH fmt (Right fp) = \str -> withFile fp WriteMode $ \hOut -> formatH fmt (Left hOut) str
 
 
+-- | 'fmark' @fmt contents mstring@ is the friendly markup algorithm,
+-- using @fmt@ as output format, @contents@ as input and @mstyle@ as
+-- an optional style input. 'fmark' return a formatted string
+-- according to @fmt@ and a 'List' of warning messages.
 fmark :: Flag -> String -> Maybe String -> (String, [String])
 fmark fmt contents Nothing =
     (formatFn fmt Nothing $ docify $ classify contents, [])
@@ -361,6 +411,9 @@ fmark fmt contents mstyle@(Just style) =
     (formatFn fmt (Just styleDoc) doc', errs)
 
 
+-- | 'fmarkH' is an alternative version of 'fmark' that uses 'Handle's
+-- instead of 'String's thus performing 'IO' directly for input and
+-- output.
 fmarkH :: Flag -> Handle -> Either Handle FilePath -> Maybe Handle -> IO ()
 fmarkH fmt hIn eOut mstyle =
     do contents <- hGetContents hIn
@@ -375,7 +428,7 @@ fmarkH fmt hIn eOut mstyle =
                  mapM_ (hPutStrLn stderr) errs
 
 
--- | Command line options.
+-- | 'options' represents the command line options.
 options = [Option ['d'] ["doc"] (NoArg OutputDoc) "Output doc",
            Option ['l'] ["latex"] (NoArg OutputLatex) "Output latex",
            Option ['p'] ["pdf"] (NoArg OutputPdf) "Output PDF",
@@ -384,7 +437,7 @@ options = [Option ['d'] ["doc"] (NoArg OutputDoc) "Output doc",
            Option ['h'] ["help"] (NoArg Help) "Display help"]
 
 
--- | Main.
+-- | 'main'.
 main =
     do args <- getArgs
        case getOpt Permute options args of
