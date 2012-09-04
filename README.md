@@ -142,3 +142,22 @@ footnotes.
 Installation
 ------------
 
+Installation from source
+------------------------
+
+Download the source either by cloning the repository or by downloading
+the source archive.  Use the standard Cabal steps:
+
+    $ cabal configure
+
+build application
+
+    $ cabal build
+
+compile documentation documentation
+
+    $ cabal haddock --executables
+
+install application
+
+    $ cabal install
