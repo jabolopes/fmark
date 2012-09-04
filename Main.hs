@@ -218,8 +218,8 @@ withIdn m =
        return val
 
 
-docToXml :: Document -> String
-docToXml doc =
+docToXml :: Maybe Document -> Document -> String
+docToXml _ doc =
     intercalate "\n" ["<xml>", str, "</xml>"]
     where str = evalState (loop doc) (XmlState 2)
 
@@ -243,50 +243,59 @@ docToXml doc =
           loop (Section _ doc) = xmlLongTag "section" $ loop doc
 
 
-docToLatex :: Document -> String
-docToLatex doc =
+docToLatex :: Maybe Document -> Document -> String
+docToLatex mstyle doc =
     let ps = properties doc 
         title = lookup "Title" ps
         author = lookup "Author" ps
         date = lookup "Date" ps
         abstract = lookup "Abstract" ps
+        maketitle = case mstyle of
+                      Nothing -> ""
+                      _ -> def "maketitle"
     in
-      comArgs "documentclass" ["a4paper"] "article" ++ "\n" ++
-      prop (com "title") title ++
-      prop (com "author") author ++
-      prop (com "date") date ++
-      (env "document" $
-        def "maketitle" ++ "\n" ++
-        prop (env "abstract") abstract ++
-        (intercalate "\n" $ filterLines $ loop 0 doc))
+      seq [comArgs "documentclass" ["a4paper"] "article",
+           prop (com "title") title,
+           prop (com "author") author,
+           prop (com "date") date,
+           env "document" $ seq [maketitle,
+                                 prop (env "abstract") abstract,
+                                 loop 0 doc]]
     where properties (Heading msty str) = maybe [] (\sty -> [(sty, str)]) msty
           properties (Paragraph msty str) = maybe [] (\sty -> [(sty, str)]) msty
           properties (Content _ docs) = concatMap properties docs
           properties (Section _ doc) = properties doc
           
-          ltStr newlines str =
+          lit newlines str =
               concatMap sub str
               where sub '#' = "\\#"
                     sub '\n' | newlines = "\\\\"
                     sub c = [c]
 
-          def id = "\\" ++ id
-          com id str = "\\" ++ id ++ "{" ++ str ++ "}"
-          comArgs id args str = "\\" ++ id ++ "[" ++ intercalate "," args ++ "]{" ++ str ++ "}"
-          env id str = "\\begin{" ++ id ++ "}\n" ++ str ++ "\n\\end{" ++ id ++ "}"
+          nls str =
+              concatMap nls' str
+              where nls' '\n' = "\\\\"
+                    nls' c = [c]
 
-          prop fn mp = maybe "" (\str -> fn (ltStr False str) ++ "\n") mp
+          def id = "\\" ++ id
+          com id str = "\\" ++ id ++ "{" ++ lit False str ++ "}"
+          comArgs id args str = "\\" ++ id ++ "[" ++ intercalate "," args ++ "]{" ++ lit False str ++ "}"
+          env id str = "\\begin{" ++ id ++ "}\n" ++ lit False str ++ "\n\\end{" ++ id ++ "}"
+
+          prop fn mp = maybe "" (\str -> fn $ lit False str) mp
 
           sec lvl str
-              | lvl < 3 = com (concat (replicate lvl "sub") ++ "section") $ ltStr True str
-              | lvl == 3 = com "paragraph" $ ltStr True str
-              | lvl == 4 = com "subparagraph" $ ltStr True str
+              | lvl < 3 = com (concat (replicate lvl "sub") ++ "section") $ lit True str
+              | lvl == 3 = com "paragraph" $ lit True str
+              | lvl == 4 = com "subparagraph" $ lit True str
 
-          par = ltStr False
+          par = lit False
+
+          seq = intercalate "\n\n" . filter (\ln -> trim ln /= "")
 
           loop lvl (Heading Nothing str) = sec lvl str
           loop _ (Paragraph Nothing str) = par str
-          loop lvl (Content _ docs) = intercalate "\n\n" $ map (loop lvl) docs
+          loop lvl (Content _ docs) = seq $ map (loop lvl) docs
           loop lvl (Section _ doc) = loop (lvl + 1) doc
           loop _ _ = ""
 
@@ -326,8 +335,8 @@ data Flag
       deriving (Eq, Show)
 
 
-formatFn :: Flag -> Document -> String
-formatFn OutputDoc = show
+formatFn :: Flag -> Maybe Document -> Document -> String
+formatFn OutputDoc = const show
 formatFn OutputLatex = docToLatex
 formatFn OutputPdf = formatFn OutputLatex
 formatFn OutputXml = docToXml
@@ -343,13 +352,13 @@ formatH fmt (Right fp) = \str -> withFile fp WriteMode $ \hOut -> formatH fmt (L
 
 fmark :: Flag -> String -> Maybe String -> (String, [String])
 fmark fmt contents Nothing =
-    (formatFn fmt $ docify $ classify contents, [])
+    (formatFn fmt Nothing $ docify $ classify contents, [])
 
-fmark fmt contents (Just style) =
+fmark fmt contents mstyle@(Just style) =
     let doc = docify $ classify contents in
     let styleDoc = docify $ classify style in
     let (doc', errs) = weaveStyle doc styleDoc in
-    (formatFn fmt doc', errs)
+    (formatFn fmt (Just styleDoc) doc', errs)
 
 
 fmarkH :: Flag -> Handle -> Either Handle FilePath -> Maybe Handle -> IO ()
