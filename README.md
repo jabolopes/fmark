@@ -55,13 +55,13 @@ the repository, you can find this file in the 'examples' directory.
 
         The first subsection
 
-	It is very simple to create subsections. No special characters are
-	needed. Simply use indentation to indicate the beginning and end of
-	your sections.
+        It is very simple to create subsections. No special characters are
+        needed. Simply use indentation to indicate the beginning and end of
+        your sections.
 
-	The second subsection
+        The second subsection
 
-	Another subsection with a different title. Again, very simple.
+        Another subsection with a different title. Again, very simple.
 
 Copy the following text into 'example.style'.  Again, this file is
 also available in the 'examples' directory.
