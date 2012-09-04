@@ -81,8 +81,9 @@ using both documents.  Run the following command:
 
 This command produces a PDF from the document 'example' using
 'example.style' as the style document.  After running this command,
-you should have a 'example.pdf' PDF file which you can open with your
-preferred PDF viewer.
+you should have a
+'[example.pdf](http://github.com/jabolopes/fmark/blob/master/examples/example.pdf?raw=true)'
+PDF file which you can open with your preferred PDF viewer.
 
 Let's take a look at other options.  You can generate a PDF without
 styling
