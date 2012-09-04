@@ -1,3 +1,4 @@
+{-# LANGUAGE ParallelListComp #-}
 module Main where
 
 import Prelude hiding (lex)
@@ -15,12 +16,18 @@ import System.FilePath
 import System.IO
 import System.IO.Error
 import System.Process
-import System.Unix.Directory
+import System.Unix.Directory hiding (find)
 
 
 -- | The lines of a 'String' without empty lines.
 filterLines :: String -> [String]
 filterLines str = [ ln | ln <- lines str, trim ln /= "" ]
+
+
+flatten str =
+    map loop str
+    where loop '\n' = ','
+          loop c = c
 
 
 -- | The number of space characters at the begining of a 'String'.
@@ -32,6 +39,15 @@ indentation ln = length $ takeWhile isSpace ln
 -- space in between.
 join :: String -> String -> String
 join ln1 ln2 = (dropWhileEnd isSpace ln1) ++ "\n" ++ (dropWhile isSpace ln2)
+
+
+prefix :: String -> String -> String
+prefix pre str =
+    pre ++ prefix' str
+    where prefix' str =
+              concatMap (\c -> case c of
+                                 '\n' -> '\n':pre
+                                 _ -> [c]) str
 
 
 -- | The 'List' with an additional element only if that element is not
@@ -95,19 +111,21 @@ classify lns =
 
 data Document
     -- | A 'Heading' in a 'Document'.
-    = Heading String
+    = Heading (Maybe String) String
     -- | A 'Paragraph' in a 'Document'.
-    | Paragraph String
+    | Paragraph (Maybe String) String
     -- | A sequence of 'Document' elements.
-    | Content [Document]
+    | Content (Maybe String) [Document]
     -- | A subsection in a 'Document'.
-    | Section Document
+    | Section (Maybe String) Document
 
 instance Show Document where
-    show (Heading str) = "Heading = " ++ str
-    show (Paragraph str) = "Paragraph = " ++ str
-    show (Content docs) = intercalate "\n" $ map show docs
-    show (Section doc) = "begin\n" ++ show doc ++ "\nend"
+    show (Heading Nothing str) = "Heading = " ++ str
+    show (Heading (Just sty) str) = "Heading(" ++ flatten sty ++ ") = " ++ str
+    show (Paragraph Nothing str) = "Paragraph = " ++ str
+    show (Paragraph (Just sty) str) = "Paragraph(" ++ sty ++ ") = " ++ str
+    show (Content _ docs) = intercalate "\n" $ map show docs
+    show (Section _ doc) = "begin\n" ++ show doc ++ "\nend"
 
 
 -- | Parses a sequence of 'Token's into a 'Document'.
@@ -115,24 +133,57 @@ docify :: [Token] -> Document
 docify tokens =
     loop tokens [[]]
     where loop :: [Token] -> [[Document]] -> Document
-          loop [] [doc] = Content $ reverse doc
+          loop [] [doc] = Content Nothing $ reverse doc
           loop [] st = loop [EndSection] st
 
           loop ((Text str):tokens) (top:st) =
               let cons = if isPunctuation $ last str then Paragraph else Heading in
-              loop tokens ((cons str:top):st)
+              loop tokens ((cons Nothing str:top):st)
 
           loop (BeginSection:tokens) st =
               loop tokens ([]:st)
 
           loop (EndSection:tokens) (top:bot:st) =
-              loop tokens (((Section $ Content $ reverse top):bot):st)
+              loop tokens (((Section Nothing $ Content Nothing $ reverse top):bot):st)
 
           loop tokens st =
               error $ "\n\n\tloop: unhandled case" ++
                       "\n\n\t tokens = " ++ show tokens ++
                       "\n\n\t st = " ++ show st ++ "\n\n"
 
+
+weaveStyle :: Document -> Document -> (Document, [String])
+weaveStyle doc style =
+    loop doc style
+    where msg title str desc sty =
+              "In " ++ title ++ "\n"
+                    ++ prefix "  " str ++ "\n"
+                    ++ desc ++ "\n"
+                    ++ prefix "  " sty
+          
+          loop doc@(Heading _ str) (Heading _ sty) =
+              let errs = case length (lines str) == length (lines sty) of
+                           True -> []
+                           _ -> [msg "Heading" str "does not match style" sty] in
+              (Heading (Just sty) str, errs)
+
+          loop (Paragraph _ str) (Paragraph _ sty) =
+              -- currently, paragraph newlines are striped before getting here...
+              let errs | length (lines sty) == 1 = []
+                       | otherwise = [msg "Paragraph" str "paragraph styles must be one line" sty] in
+              (Paragraph (Just (init sty)) str, [])
+
+          loop (Content _ docs1) (Content _ docs2) =
+              let (docsSty, docsNoSty) = splitAt (length docs2) docs1 in
+              let (docsSty', errss) = unzip [ loop doc1 doc2 | doc1 <- docsSty | doc2 <- docs2 ] in
+              (Content Nothing (docsSty' ++ docsNoSty), concat errss)
+
+          loop (Section _ doc1) (Section _ doc2) =
+              let (doc', errs) = loop doc1 doc2 in
+              (Section Nothing doc', errs)
+
+          loop doc _ = (doc, [show doc])
+              
 
 data XmlState = XmlState Int
 type XmlM a = State XmlState a
@@ -172,10 +223,10 @@ docToXml doc =
                    str ++ "\n" ++
                    (xmlIndent idn "</" ++ tag ++ ">")
 
-          loop (Heading str) = xmlShortTag "heading" str
-          loop (Paragraph str) = xmlShortTag "paragraph" str
-          loop (Content docs) = xmlLongTag "content" $ intercalate "\n" <$> mapM loop docs 
-          loop (Section doc) = xmlLongTag "section" $ loop doc
+          loop (Heading _ str) = xmlShortTag "heading" str
+          loop (Paragraph _ str) = xmlShortTag "paragraph" str
+          loop (Content _ docs) = xmlLongTag "content" $ intercalate "\n" <$> mapM loop docs 
+          loop (Section _ doc) = xmlLongTag "section" $ loop doc
 
 
 docToLatex :: Document -> String
@@ -197,10 +248,10 @@ docToLatex doc =
 
           ltParagraph str = ltStr str False
 
-          loop lvl (Heading str) = ltSection lvl str
-          loop lvl (Paragraph str) = ltParagraph str
-          loop lvl (Content docs) = intercalate "\n\n" $ map (loop lvl) docs
-          loop lvl (Section doc) = loop (lvl + 1) doc
+          loop lvl (Heading _ str) = ltSection lvl str
+          loop lvl (Paragraph _ str) = ltParagraph str
+          loop lvl (Content _ docs) = intercalate "\n\n" $ map (loop lvl) docs
+          loop lvl (Section _ doc) = loop (lvl + 1) doc
 
 
 pdflatex :: FilePath -> String -> IO ()
@@ -236,6 +287,7 @@ data Flag
     | OutputXml
     -- | Display usage information.
     | Help
+    | Style String
       deriving (Eq, Show)
 
 
@@ -251,6 +303,21 @@ fmark fmt contents =
                 OutputPdf -> error "cannot use stdin with PDF output format"
                 OutputTokens -> return . intercalate "\n" . map show
                 OutputXml -> return . docToXml . docify
+
+fmarkStyle fmt hIn hOut styleFp =
+    withFile styleFp ReadMode $
+      \hStyle -> do style <- hGetContents hStyle
+                    let styleDoc = docify $ classify style
+                    
+                    contents <- hGetContents hIn
+                    let doc = docify $ classify contents
+
+                    let (doc', errs) = weaveStyle doc styleDoc
+                    putStrLn $ show doc'
+                    case errs of
+                      [] -> return ()
+                      _ -> do hPutStrLn stderr "Style warnings:"
+                              mapM_ (hPutStrLn stderr) errs
 
 
 -- | Run friendly markup with the specified output format and input
@@ -279,6 +346,7 @@ fmarkH fmt hIn (Right fp) =
 options = [Option ['d'] ["doc"] (NoArg OutputDoc) "Output doc",
            Option ['l'] ["latex"] (NoArg OutputLatex) "Output latex",
            Option ['p'] ["pdf"] (NoArg OutputPdf) "Output PDF",
+           Option ['s'] ["style"] (ReqArg Style "style-name") "Style",
            Option ['t'] ["token"] (NoArg OutputTokens) "Output tokens",
            Option ['x'] ["xml"] (NoArg OutputXml) "Output xml",
            Option ['h'] ["help"] (NoArg Help) "Display help"]
@@ -302,11 +370,17 @@ main =
           
           processOpts opts _ | Help `elem` opts = putUsage
           processOpts opts nonOpts =
-              hInFn $ \hIn -> fmarkH fmt hIn eOut
+              case mstyle of
+                Nothing -> hInFn $ \hIn -> fmarkH fmt hIn eOut
+                Just (Style style) -> hInFn $ \hIn -> fmarkStyle fmt hIn eOut style
               where fmt = case opts of
                             [] -> OutputDoc
                             _ -> last opts
-                    
+
+                    mstyle = find (\x -> case x of
+                                           Style _ -> True
+                                           _ -> False) $ reverse opts
+
                     hInFn = case nonOpts of
                               [] -> \fn -> fn stdin
                               _ -> withFile (last nonOpts) ReadMode
