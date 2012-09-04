@@ -85,6 +85,9 @@ you should have a
 '[example.pdf](http://github.com/jabolopes/fmark/blob/master/examples/example.pdf?raw=true)'
 PDF file which you can open with your preferred PDF viewer.
 
+Formats
+-------
+
 Let's take a look at other options.  You can generate a PDF without
 styling
 
