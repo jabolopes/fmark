@@ -77,7 +77,7 @@ the style.  As you can see, there are some similarities between the
 content and the style documents.  Now, let's ask Fmark to create a PDF
 using both documents.  Run the following command:
 
-> fmark -s example.style -p example
+    $ fmark -s example.style -p example
 
 This command produces a PDF from the document 'example' using
 'example.style' as the style document.  After running this command,
@@ -87,15 +87,15 @@ preferred PDF viewer.
 Let's take a look at other options.  You can generate a PDF without
 styling
 
-> fmark -p example
+    $ fmark -p example
 
 you can change the output format to XML
 
-> fmark -x example
+    $ fmark -x example
 
 and you can simply output the LaTeX formatting
 
-> fmark -l example
+    $ fmark -l example
 
 These options can also be combined with styles if necessary.
 
