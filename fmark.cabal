@@ -1,5 +1,5 @@
 name:                fmark
-version:             0.1.0.0
+version:             0.1.0
 homepage:            http://github.com/jabolopes/fmark
 bug-reports:         http://github.com/jabolopes/fmark/issues
 synopsis:            A Friendly Markup language without syntax.
@@ -11,7 +11,7 @@ license-file:        LICENSE
 author:              José Lopes
 maintainer:          José Lopes <jabolopes@gmail.com>
 stability:           Experimental
-category:            Text
+category:            Typography
 
 build-type:          Simple
 cabal-version:       >=1.8
