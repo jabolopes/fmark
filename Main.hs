@@ -20,8 +20,8 @@ import System.Unix.Directory hiding (find)
 
 
 -- | The lines of a 'String' without empty lines.
-filterLines :: String -> [String]
-filterLines str = [ ln | ln <- lines str, trim ln /= "" ]
+filterLines :: [String] -> [String]
+filterLines lns = [ ln | ln <- lns, trim ln /= "" ]
 
 
 flatten str =
@@ -310,7 +310,7 @@ pdflatex outFp contents =
                                                         { std_in = CreatePipe,
                                                           std_out = UseHandle hNull,
                                                           std_err = UseHandle hNull }
-                                 mapM_ (hPutStrLn hIn) $ filterLines contents
+                                 mapM_ (hPutStrLn hIn) $ filterLines $ lines contents
                                  hClose hIn
                                  waitForProcess h
                                  copyFile (pdfFp outDir) (addExtension (dropExtensions outFp) "pdf")
