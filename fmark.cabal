@@ -2,8 +2,10 @@ name:                fmark
 version:             0.1.0.0
 homepage:            http://github.com/jabolopes/fmark
 bug-reports:         http://github.com/jabolopes/fmark/issues
-synopsis:            A Friendly Markup language without formatting.
-description:         A Friendly Markup language that preserves the original document format.
+synopsis:            A Friendly Markup language without syntax.
+description:         Fmark (Friendly Markup) is a very simple markup language without
+		     syntax and simple but sophisticated document styling, capable of
+		     producing PDF and XML files.
 license:             BSD3
 license-file:        LICENSE
 author:              José Lopes
