@@ -78,9 +78,9 @@ structure.  Now, let's ask Fmark to create a PDF using both documents
 
     $ fmark -s example.style -p example
 
-This will a [PDF with styling](http://github.com/jabolopes/fmark/blob/master/doc/examples/example.pdf?raw=true)
-using 'example' as the contents document and 'example.style' as the style
-document.  After running this command, you should have a
+This command produces a [PDF with styling](http://github.com/jabolopes/fmark/blob/master/doc/examples/example.pdf?raw=true)
+using 'example' as the contents document and 'example.style' as the
+style document.  After running this command, you should have a
 'example.pdf' PDF file which you can open with your preferred PDF
 viewer.
 
