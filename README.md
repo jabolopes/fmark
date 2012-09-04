@@ -38,7 +38,7 @@ Example
 
 Let's try out a real example.  Copy the following text into a file
 named 'example' or, if you have downloaded the source code or cloned
-the repository, you can find this file in the 'examples' directory.
+the repository, you can find this file in the 'doc/examples' directory.
 
     My first Fmark document
     José Lopes
@@ -64,7 +64,7 @@ the repository, you can find this file in the 'examples' directory.
         Another subsection with a different title. Again, very simple.
 
 Copy the following text into 'example.style'.  Again, this file is
-also available in the 'examples' directory.
+also available in the 'doc/examples' directory.
 
     Title
     Author
@@ -82,7 +82,7 @@ using both documents.  Run the following command:
 This command produces a PDF from the document 'example' using
 'example.style' as the style document.  After running this command,
 you should have a
-'[example.pdf](http://github.com/jabolopes/fmark/blob/master/examples/example.pdf?raw=true)'
+'[example.pdf](http://github.com/jabolopes/fmark/blob/master/doc/examples/example.pdf?raw=true)'
 PDF file which you can open with your preferred PDF viewer.
 
 Formats
