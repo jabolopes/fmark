@@ -40,37 +40,37 @@ Let's try out a real example.  Copy the following text into a file
 named 'example' or, if you have downloaded the source code or cloned
 the repository, you can find this file in the 'examples' directory.
 
-> My first Fmark document
-> José Lopes
-> Sunday, Sep 4 2012
->
->   Fmark (Friendly Markup) is a very simple markup language without
->   syntax, capable of producing PDF and XML files, and very simple
->   document but sophisticated styling.
->
-> The first section
->
-> Hello, welcome to Fmark.
-> This is the first section of your document.
->
->   The first subsection
->
->   It is very simple to create subsections. No special characters are
->   needed. Simply use indentation to indicate the beginning and end of
->   your sections.
->
->   The second subsection
->
->   Another subsection with a different title. Again, very simple.
+    My first Fmark document
+    José Lopes
+    Sunday, Sep 4 2012
+
+        Fmark (Friendly Markup) is a very simple markup language without
+        syntax, capable of producing PDF and XML files, and very simple
+        document but sophisticated styling.
+
+    The first section
+
+    Hello, welcome to Fmark.
+    This is the first section of your document.
+
+        The first subsection
+
+	It is very simple to create subsections. No special characters are
+	needed. Simply use indentation to indicate the beginning and end of
+	your sections.
+
+	The second subsection
+
+	Another subsection with a different title. Again, very simple.
 
 Copy the following text into 'example.style'.  Again, this file is
 also available in the 'examples' directory.
 
-> Title
-> Author
-> Date
->
->   Abstract.
+    Title
+    Author
+    Date
+
+        Abstract.
 
 Ok! So the first document is the content and the second document is
 the style.  As you can see, there are some similarities between the
@@ -112,31 +112,31 @@ end in a punctuation symbol (e.g., period, exclamation or
 interrogation marks), they are considered paragraphs.  Otherwise, they
 are considered headings.  For example, the following is a paragraph
 
-> Hi! This is a paragraph which
-> happens to spans multiple lines.
+    Hi! This is a paragraph which
+    happens to spans multiple lines.
 
 but the following is a heading
 
-> Hi! This is a heading which
-> also spans multiple lines
+    Hi! This is a heading which
+    also spans multiple lines
 
 The second rule is for sections and subsections: increase in
 indentation causes a new subsection to be created which spans until
 that indentation is decreased.  For example, the following is a
 section with two subsections and a subsubsection.
 
-> This is a section.
->
->   This is a subsection.
->
->     This is a subsubsection.
->
->   Back to the subsection.
->
-> And we are back on the first section.
+    This is a section.
 
-Other rules will be added in the future for enumerations, hyphenized
-lists, and footnotes.
+        This is a subsection.
+
+            This is a subsubsection.
+
+        Back to the subsection.
+
+    And we are back on the first section.
+
+Other rules will be added in the future for enumerations, lists, and
+footnotes.
 
 Installation
 ------------
