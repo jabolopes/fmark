@@ -146,8 +146,16 @@ section with two subsections and a subsubsection.
 Other rules will be added in the future for enumerations, lists, and
 footnotes.
 
-Installation
-------------
+Installation from HackageDB
+---------------------------
+
+Installing from HackageDB is probably the best method. Use Cabal
+install following these steps, making sure that your package list is
+updated
+
+    $ cabal update
+
+    $ cabal install fmark
 
 Installation from source
 ------------------------
