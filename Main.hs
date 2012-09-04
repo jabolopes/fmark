@@ -435,7 +435,7 @@ options = [Option "d" ["doc"] (NoArg OutputDoc) "Output doc",
            Option "p" ["pdf"] (NoArg OutputPdf) "Output PDF",
            Option "s" ["style"] (ReqArg Style "style-name") "Style",
            Option "x" ["xml"] (NoArg OutputXml) "Output xml",
-           Option "h" ["help"] (NoArg Help) "Display help"]
+           Option [] ["help"] (NoArg Help) "Display help"]
 
 
 -- | 'main'.
