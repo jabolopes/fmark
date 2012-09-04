@@ -73,19 +73,18 @@ also available in the 'doc/examples' directory.
         Abstract.
 
 OK! So the first document is the content and the second document is
-the style.  As you can see, there are some similarities between the
-content and the style documents.  Now, let's ask Fmark to create a PDF
-using both documents.  Run the following command:
+the style.  As you can see, both documents have very similar
+structure.  Now, let's ask Fmark to create a PDF using both documents
 
     $ fmark -s example.style -p example
 
-This command produces a PDF from the document 'example' using
-'example.style' as the style document.  After running this command,
-you should have a
-'[example.pdf](http://github.com/jabolopes/fmark/blob/master/doc/examples/example.pdf?raw=true)'
-PDF file which you can open with your preferred PDF viewer.
+This will a [PDF with styling](http://github.com/jabolopes/fmark/blob/master/doc/examples/example.pdf?raw=true)
+using 'example' as the contents document and 'example.style' as the style
+document.  After running this command, you should have a
+'example.pdf' PDF file which you can open with your preferred PDF
+viewer.
 
-You can also generate a [PDF without styling](http://github.com/jabolopes/fmark/blob/master/doc/examples/exampleNoStyle.pdf?raw=true)
+You can also create a [PDF without styling](http://github.com/jabolopes/fmark/blob/master/doc/examples/exampleNoStyle.pdf?raw=true)
 by omitting the style argument
 
     $ fmark -p example
