@@ -72,7 +72,7 @@ also available in the 'examples' directory.
 
         Abstract.
 
-Ok! So the first document is the content and the second document is
+OK! So the first document is the content and the second document is
 the style.  As you can see, there are some similarities between the
 content and the style documents.  Now, let's ask Fmark to create a PDF
 using both documents.  Run the following command:
@@ -153,7 +153,10 @@ Installation from source
 ------------------------
 
 Download the source either by cloning the repository or by downloading
-the source archive.  Use the standard Cabal steps:
+the source archive. Once you have the source, you can either use Cabal
+(recommended) or the standard Haskell setup mechanism.
+
+For Cabal, follow these steps
 
     $ cabal configure
 
@@ -168,3 +171,19 @@ compile documentation
 install application
 
     $ cabal install
+
+For the standard Haskell setup, follow these steps
+
+    $ runhaskell Setup configure
+
+build application
+
+    $ runhaskell Setup build
+
+compile documentation
+
+    $ runhaskell Setup haddock --executables
+
+install application
+
+    $ runhaskell Setup install
