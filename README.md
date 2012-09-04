@@ -31,7 +31,7 @@ Features:
 - automatic reconstruction of document structure
 - no special syntactic characters to memorize or taint your document
 - styles written in the same language
-- write one document, experiment different styles and formats
+- write one document, experiment with multiple styles and formats
 
 Example
 -------
