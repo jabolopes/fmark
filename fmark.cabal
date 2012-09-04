@@ -4,7 +4,7 @@ homepage:            http://github.com/jabolopes/fmark
 bug-reports:         http://github.com/jabolopes/fmark/issues
 synopsis:            A Friendly Markup language without formatting.
 description:         A Friendly Markup language that preserves the original document format.
-license:             GPL-3
+license:             BSD3
 license-file:        LICENSE
 author:              José Lopes
 maintainer:          José Lopes <jabolopes@gmail.com>
