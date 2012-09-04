@@ -1,0 +1,22 @@
+My first Fmark document
+José Lopes
+Sunday, Sep 4 2012
+
+  Fmark (Friendly Markup) is a very simple markup language without
+  syntax, capable of producing PDF and XML files, and very simple
+  document but sophisticated styling.
+
+The first section
+
+Hello, welcome to Fmark.
+This is the first section of your document.
+
+  The first subsection
+
+  It is very simple to create subsections. No special characters are
+  needed. Simply use indentation to indicate the beginning and end of
+  your sections.
+
+  The second subsection
+
+  Another subsection with a different title. Again very simple.
