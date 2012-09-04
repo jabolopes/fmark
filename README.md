@@ -150,6 +150,8 @@ footnotes.
 Installation from HackageDB
 ---------------------------
 
+(TODO)
+
 Installing from HackageDB is probably the best method. Use Cabal
 install following these steps, making sure that your package list is
 updated
