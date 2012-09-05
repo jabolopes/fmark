@@ -26,11 +26,11 @@ filterLines :: [String] -> [String]
 filterLines lns = [ ln | ln <- lns, trim ln /= "" ]
 
 
--- | 'flatten' @c str@ replaces newlines in @str@ with @c@
+-- | 'replace' @c str@ replaces newlines in @str@ with @c@
 --
--- > flatten "hello\ngoodbye" == "hello,goodbye"
-flatten :: Char -> String -> String
-flatten c =
+-- > replace "hello\ngoodbye" == "hello,goodbye"
+replace :: Char -> String -> String
+replace c =
     map loop
     where loop '\n' = c
           loop c = c
@@ -197,7 +197,7 @@ docify tks =
 
           loop (Text str:tks) (top:st) =
               loop tks ((doc:top):st)
-              where doc | isPunctuation $ last str = Paragraph $ reconstructParagraph $ flatten ' ' str
+              where doc | isPunctuation $ last str = Paragraph $ reconstructParagraph $ replace ' ' str
                         | otherwise = Heading $ reconstructHeading str
 
           loop (BeginSection:tks) st =
