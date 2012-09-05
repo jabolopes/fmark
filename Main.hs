@@ -150,9 +150,6 @@ data Document
     | Literal String
     | Style String Document
 
-showStyle Nothing = ""
-showStyle (Just sty) = "(" ++ sty ++ ")"
-
 instance Show Document where
     show (Heading docs) = "Heading = " ++ show docs
     show (Paragraph doc) = "Paragraph = " ++ show doc
