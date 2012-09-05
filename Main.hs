@@ -262,22 +262,29 @@ docToXml _ doc =
 
           xmlIndent lvl str = replicate lvl ' ' ++ str
 
-          xmlShortTag tag str =
-              do idn <- getIdn
-                 return $ xmlIndent idn "<" ++ tag ++ ">" ++ str ++ "</" ++ tag ++ ">"
+          xmlAttribute Nothing = []
+          xmlAttribute (Just val) = [("style", val)]
 
-          xmlLongTag tag m =
+          xmlAttributes :: [(String, String)] -> String
+          xmlAttributes [] = ""
+          xmlAttributes attrs = " " ++ (intercalate " " $ map (\(id, val) -> id ++ "=\"" ++ val ++ "\"") attrs)
+
+          xmlShortTag attrs tag str =
+              do idn <- getIdn
+                 return $ xmlIndent idn "<" ++ tag ++ xmlAttributes attrs ++ ">" ++ str ++ "</" ++ tag ++ ">"
+
+          xmlLongTag attrs tag m =
               do idn <- getIdn
                  str <- withIdn m
                  return $
-                   (xmlIndent idn "<" ++ tag ++ ">\n") ++
+                   (xmlIndent idn "<" ++ tag ++ xmlAttributes attrs ++ ">\n") ++
                    str ++ "\n" ++
                    (xmlIndent idn "</" ++ tag ++ ">")
 
-          loop (Heading _ str) = xmlShortTag "heading" str
-          loop (Paragraph _ str) = xmlShortTag "paragraph" str
-          loop (Content _ docs) = xmlLongTag "content" $ intercalate "\n" <$> mapM loop docs 
-          loop (Section _ doc) = xmlLongTag "section" $ loop doc
+          loop (Heading mstyle str) = xmlShortTag (xmlAttribute mstyle) "heading" str
+          loop (Paragraph mstyle str) = xmlShortTag (xmlAttribute mstyle) "paragraph" str
+          loop (Content mstyle docs) = xmlLongTag (xmlAttribute mstyle) "content" $ intercalate "\n" <$> mapM loop docs 
+          loop (Section mstyle doc) = xmlLongTag (xmlAttribute mstyle) "section" $ loop doc
 
 
 -- | 'docToLatex' @mstyle doc@ formats a styled 'Document' @doc@ into
