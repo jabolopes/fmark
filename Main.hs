@@ -142,23 +142,23 @@ data Document
     | Paragraph (Maybe String) [Document]
     -- | 'Content' is a 'Document' part that represents a sequence of
     -- 'Document's.
-    | Content (Maybe String) [Document]
+    | Content [Document]
     -- | 'Section' is a 'Document' part that represents a subsection.
-    | Section (Maybe String) Document
+    | Section Document
 
     | Footnote (Maybe String) Document
     | Line String
 
-instance Show Document where
-    show (Heading Nothing doc) = "Heading = " ++ show doc
-    show (Heading (Just sty) doc) = "Heading(" ++ flatten sty ++ ") = " ++ show doc
-    show (Paragraph Nothing doc) = "Paragraph = " ++ show doc
-    show (Paragraph (Just sty) doc) = "Paragraph(" ++ sty ++ ") = " ++ show doc
-    show (Content _ docs) = intercalate "\n" $ map show docs
-    show (Section _ doc) = "begin\n" ++ show doc ++ "\nend"
+showStyle Nothing = ""
+showStyle (Just sty) = "(" ++ sty ++ ")"
 
-    show (Footnote Nothing doc) = "Footnote = " ++ show doc
-    show (Footnote (Just sty) doc) = "Footnote(" ++ sty ++ ") = " ++ show doc
+instance Show Document where
+    show (Heading mstyle doc) = "Heading" ++ showStyle mstyle ++ " = " ++ show doc
+    show (Paragraph mstyle doc) = "Paragraph" ++ showStyle mstyle ++ " = " ++ show doc
+    show (Content docs) = intercalate "\n" $ map show docs
+    show (Section doc) = "begin\n" ++ show doc ++ "\nend"
+
+    show (Footnote mstyle doc) = "Footnote" ++ showStyle mstyle ++ " = " ++ show doc
     show (Line str) = str
 
 
@@ -175,7 +175,7 @@ reconstruct = map (reconstruct' . loop) . lines
 
           reconstruct' [] = error "reconstruct: reconstruct': empty list"
           reconstruct' [doc] = doc
-          reconstruct' docs = Content Nothing docs
+          reconstruct' docs = Content docs
 
 
 -- | 'docify' @tks@ parses the sequence of 'Token's @tks@ into a 'Document'.
@@ -183,7 +183,7 @@ docify :: [Token] -> Document
 docify tks =
     loop tks [[]]
     where loop :: [Token] -> [[Document]] -> Document
-          loop [] [doc] = Content Nothing $ reverse doc
+          loop [] [doc] = Content $ reverse doc
           loop [] st = loop [EndSection] st
 
           loop (Text str:tks) (top:st) =
@@ -194,7 +194,7 @@ docify tks =
               loop tks ([]:st)
 
           loop (EndSection:tks) (top:bot:st) =
-              loop tks ((Section Nothing (Content Nothing $ reverse top):bot):st)
+              loop tks ((Section (Content $ reverse top):bot):st)
 
           loop tks st =
               error $ "\n\n\tloop: unhandled case" ++
@@ -228,7 +228,7 @@ weaveStyle doc style =
                 case hds of
                   [] -> error "weaveStyle: loop: headings are empty"
                   [hd] -> (hd, errs)
-                  _ -> (Content Nothing hds, errs)
+                  _ -> (Content hds, errs)
 
           loop (Paragraph _ cnts) (Paragraph _ stys) =
               -- currently, paragraph newlines are striped before getting here... is this true ?
@@ -238,14 +238,14 @@ weaveStyle doc style =
               in
                 (Paragraph (Just sty) cnts, [])
 
-          loop (Content _ docs1) (Content _ docs2) =
+          loop (Content docs1) (Content docs2) =
               let (docsSty, docsNoSty) = splitAt (length docs2) docs1
                   (docsSty', errss) = unzip [ loop doc1 doc2 | doc1 <- docsSty | doc2 <- docs2 ] in
-              (Content Nothing (docsSty' ++ docsNoSty), concat errss)
+              (Content (docsSty' ++ docsNoSty), concat errss)
 
-          loop (Section _ doc1) (Section _ doc2) =
+          loop (Section doc1) (Section doc2) =
               let (doc', errs) = loop doc1 doc2 in
-              (Section Nothing doc', errs)
+              (Section doc', errs)
 
           loop doc _ = (doc, [show doc])
               
@@ -306,8 +306,8 @@ docToXml _ doc =
 
           loop (Heading mstyle doc) = xmlLongTag (xmlAttribute mstyle) "heading" $ intercalate "\n" <$> mapM loop doc
           loop (Paragraph mstyle doc) = xmlLongTag (xmlAttribute mstyle) "paragraph" $ intercalate "\n" <$> mapM loop doc
-          loop (Content mstyle docs) = xmlLongTag (xmlAttribute mstyle) "content" $ intercalate "\n" <$> mapM loop docs 
-          loop (Section mstyle doc) = xmlLongTag (xmlAttribute mstyle) "section" $ loop doc
+          loop (Content docs) = xmlLongTag [] "content" $ intercalate "\n" <$> mapM loop docs 
+          loop (Section doc) = xmlLongTag [] "section" $ loop doc
 
           loop (Line str) = xmlShortTag [] "line" str
           loop (Footnote mstyle doc) = xmlLongTag (xmlAttribute mstyle) "footnote" $ loop doc
