@@ -146,8 +146,8 @@ data Document
     -- | 'Section' is a 'Document' part that represents a subsection.
     | Section Document
 
-    | Footnote (Maybe String) Document
-    | Line String
+    | Footnote String
+    | Literal String
 
 showStyle Nothing = ""
 showStyle (Just sty) = "(" ++ sty ++ ")"
@@ -158,22 +158,24 @@ instance Show Document where
     show (Content docs) = intercalate "\n" $ map show docs
     show (Section doc) = "begin\n" ++ show doc ++ "\nend"
 
-    show (Footnote mstyle doc) = "Footnote" ++ showStyle mstyle ++ " = " ++ show doc
-    show (Line str) = str
+    show (Footnote str) = "Footnote = " ++ str
+    show (Literal str) = str
 
 
-reconstruct :: String -> [Document]
-reconstruct = map (reconstruct' . loop) . lines
+reconstructParagraph :: String -> [Document]
+reconstructParagraph = loop
     where loop [] = []
           loop ('[':str) =
               case span (/= ']') str of
-                (hd, []) -> [Line $ trim hd]
-                (hd, _:tl) -> Footnote Nothing (Line (trim hd)):loop tl
+                (hd, []) -> [Literal $ trim hd]
+                (hd, _:tl) -> Footnote (trim hd):loop tl
           loop str =
-              Line (trim hd):loop tl
+              Literal (trim hd):loop tl
               where (hd, tl) = span (/= '[') str
 
-          reconstruct' [] = error "reconstruct: reconstruct': empty list"
+reconstructHeading =
+    map (reconstruct' . reconstructParagraph) . lines
+    where reconstruct' [] = error "reconstruct: reconstruct': empty list"
           reconstruct' [doc] = doc
           reconstruct' docs = Content docs
 
@@ -187,8 +189,12 @@ docify tks =
           loop [] st = loop [EndSection] st
 
           loop (Text str:tks) (top:st) =
-              let cons = if isPunctuation $ last str then Paragraph else Heading in
-              loop tks ((cons Nothing (reconstruct str):top):st)
+              let doc = if isPunctuation $ last str then
+                             Paragraph Nothing (reconstructParagraph str)
+                         else
+                             Heading Nothing (reconstructHeading str)
+              in
+              loop tks ((doc:top):st)
 
           loop (BeginSection:tks) st =
               loop tks ([]:st)
@@ -219,7 +225,7 @@ weaveStyle doc style =
                          else
                              [msg "Heading" strLns "does not match style" styLns]
                   (withStyLns, noStyLns) = splitAt (length styLns) strLns
-                  hds = [ Heading (Just sty) [Line str] | Line str <- withStyLns | Line sty <- styLns ]
+                  hds = [ Heading (Just sty) [Literal str] | Literal str <- withStyLns | Literal sty <- styLns ]
                         ++
                         case noStyLns of
                           [] -> []
@@ -234,7 +240,7 @@ weaveStyle doc style =
               -- currently, paragraph newlines are striped before getting here... is this true ?
               let errs | length stys == 1 = []
                        | otherwise = [msg "Paragraph" cnts "paragraph styles must be one line" stys]
-                  [Line sty] = stys
+                  [Literal sty] = stys
               in
                 (Paragraph (Just sty) cnts, [])
 
@@ -251,7 +257,7 @@ weaveStyle doc style =
               
 
 -- | 'XmlState' is the XML generator state.
-data XmlState = XmlState Int
+data XmlState = XmlState Int Bool
 
 -- | 'XmlM' is the type of the XML generator 'Monad'.
 type XmlM a = State XmlState a
@@ -260,8 +266,12 @@ type XmlM a = State XmlState a
 -- | 'getIdn' is a 'Monad' with the current indentation level.
 getIdn :: XmlM Int
 getIdn =
-    do XmlState idn <- get
+    do XmlState idn _ <- get
        return idn
+
+putIdn :: Int -> XmlM ()
+putIdn idn =
+    modify $ \(XmlState _ pre) -> XmlState idn pre
 
 
 -- | 'withIdn' @m@ is a 'Monad' that temporarily creates a deeper
@@ -269,9 +279,27 @@ getIdn =
 withIdn :: XmlM a -> XmlM a
 withIdn m =
     do idn <- getIdn
-       put $ XmlState $ idn + 2
+       putIdn $ idn + 2
        val <- m
-       put $ XmlState idn
+       putIdn idn
+       return val
+
+
+getPrefix :: XmlM Bool
+getPrefix =
+    do XmlState _ pre <- get
+       return pre
+
+putPrefix :: Bool -> XmlM ()
+putPrefix pre =
+    modify $ \(XmlState idn _) -> XmlState idn pre
+
+withPrefix :: Bool -> XmlM a -> XmlM a
+withPrefix pre m =
+    do pre' <- getPrefix
+       putPrefix pre
+       val <- m
+       putPrefix pre'
        return val
 
 
@@ -281,9 +309,19 @@ withIdn m =
 docToXml :: Maybe Document -> Document -> String
 docToXml _ doc =
     intercalate "\n" ["<xml>", str, "</xml>"]
-    where str = evalState (loop doc) (XmlState 2)
+    where str = evalState (loop doc) (XmlState 2 True)
 
-          xmlIndent lvl str = replicate lvl ' ' ++ str
+          --xmlIndent lvl str = replicate lvl ' ' ++ str
+
+          xmlIndent :: XmlM String -> XmlM String
+          xmlIndent m =
+              do idn <- getIdn
+                 pre <- getPrefix
+                 if pre then
+                     do str <- m
+                        return $ replicate idn ' ' ++ str
+                 else
+                     m
 
           xmlAttribute Nothing = []
           xmlAttribute (Just val) = [("style", val)]
@@ -292,25 +330,24 @@ docToXml _ doc =
           xmlAttributes [] = ""
           xmlAttributes attrs = ' ':unwords (map (\(id, val) -> id ++ "=\"" ++ val ++ "\"") attrs)
 
-          xmlShortTag attrs tag str =
-              do idn <- getIdn
-                 return $ xmlIndent idn "<" ++ tag ++ xmlAttributes attrs ++ ">" ++ str ++ "</" ++ tag ++ ">"
+          xmlStr = xmlIndent
+
+          xmlShortTag attrs tag m =
+              concat <$> sequence [xmlIndent (return ("<" ++ tag ++ xmlAttributes attrs ++ ">")), withPrefix False m, return ("</" ++ tag ++ ">")]
 
           xmlLongTag attrs tag m =
-              do idn <- getIdn
-                 str <- withIdn m
-                 return $
-                   (xmlIndent idn "<" ++ tag ++ xmlAttributes attrs ++ ">\n") ++
-                   str ++ "\n" ++
-                   (xmlIndent idn "</" ++ tag ++ ">")
+              concat <$> sequence [xmlIndent (return ("<" ++ tag ++ xmlAttributes attrs ++ ">\n")),
+                                   withIdn $ withPrefix True m,
+                                   return "\n",
+                                   xmlIndent (return ("</" ++ tag ++ ">"))]
 
-          loop (Heading mstyle doc) = xmlLongTag (xmlAttribute mstyle) "heading" $ intercalate "\n" <$> mapM loop doc
-          loop (Paragraph mstyle doc) = xmlLongTag (xmlAttribute mstyle) "paragraph" $ intercalate "\n" <$> mapM loop doc
+          loop (Heading mstyle docs) = xmlShortTag (xmlAttribute mstyle) "heading" $ intercalate " " <$> mapM loop docs
+          loop (Paragraph mstyle docs) = xmlShortTag (xmlAttribute mstyle) "paragraph" $ intercalate " " <$> mapM loop docs
           loop (Content docs) = xmlLongTag [] "content" $ intercalate "\n" <$> mapM loop docs 
           loop (Section doc) = xmlLongTag [] "section" $ loop doc
 
-          loop (Line str) = xmlShortTag [] "line" str
-          loop (Footnote mstyle doc) = xmlLongTag (xmlAttribute mstyle) "footnote" $ loop doc
+          loop (Literal str) = xmlStr (return str)
+          loop (Footnote str) = xmlShortTag [] "footnote" (return str)
 
 
 -- | 'docToLatex' @mstyle doc@ formats a styled 'Document' @doc@ into
