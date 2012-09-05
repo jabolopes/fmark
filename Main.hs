@@ -192,7 +192,7 @@ docify tks =
           reconstructHeading = map reconstructParagraph . lines
           
           loop :: [Token] -> [[Document]] -> Document
-          loop [] [doc] = Content $ reverse doc
+          loop [] [docs] = ensureDocument $ reverse docs
           loop [] st = loop [EndSection] st
 
           loop (Text str:tks) (top:st) =
@@ -240,9 +240,9 @@ weaveStyle doc style =
               (doc, [msg "Paragraph" doc "paragraph styles must be one line long" stys])
 
           loop (Content docs1) (Content docs2) =
-              let (docsSty, docsNoSty) = splitAt (length docs2) docs1
-                  (docsSty', errss) = unzip [ loop doc1 doc2 | doc1 <- docsSty | doc2 <- docs2 ] in
-              (Content (docsSty' ++ docsNoSty), concat errss)
+              let (matDocs, unmatDocs) = splitAt (length docs2) docs1
+                  (docsSty', errss) = unzip [ loop doc1 doc2 | doc1 <- matDocs | doc2 <- docs2 ] in
+              (Content (docsSty' ++ unmatDocs), concat errss)
 
           loop (Section doc1) (Section doc2) =
               let (doc', errs) = loop doc1 doc2 in
