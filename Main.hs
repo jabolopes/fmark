@@ -234,7 +234,7 @@ weaveStyle doc style =
               ([Style (init sty) cnt], [])
 
           loop doc@(Paragraph _) (Paragraph stys) =
-              ([doc], [msg "Paragraph" doc "paragraph styles must be one line long" stys])
+              ([doc], [msg "Paragraph" doc "paragraph styles must be paragraphs and one line long" stys])
 
           loop (Content docs1) (Content docs2) =
               let (matDocs, unmatDocs) = splitAt (length docs2) docs1
@@ -361,9 +361,9 @@ docToLatex mstyle doc =
         author = lookup "Author" ps
         date = lookup "Date" ps
         abstract = lookup "Abstract" ps
-        maketitle = case mstyle of
-                      Nothing -> ""
-                      _ -> def "maketitle"
+        maketitle = case (title, author, date) of
+                      (Just _, Just _, Just _) -> def "maketitle"
+                      _ -> ""
     in
       seq [comArgs "documentclass" ["a4paper"] "article",
            comArgs "usepackage" ["utf8"] "inputenc",
