@@ -354,59 +354,66 @@ docToXml _ doc =
 -- | 'docToLatex' @mstyle doc@ formats a styled 'Document' @doc@ into
 -- a LaTeX 'String', where @mstyle@ specifies the style 'Document'
 -- used to stylize @doc@.
--- docToLatex :: Maybe Document -> Document -> String
--- docToLatex mstyle doc =
---     let ps = properties doc 
---         title = lookup "Title" ps
---         author = lookup "Author" ps
---         date = lookup "Date" ps
---         abstract = lookup "Abstract" ps
---         maketitle = case mstyle of
---                       Nothing -> ""
---                       _ -> def "maketitle"
---     in
---       seq [comArgs "documentclass" ["a4paper"] "article",
---            comArgs "usepackage" ["utf8"] "inputenc",
---            prop (com "title") title,
---            prop (com "author") author,
---            prop (com "date") date,
---            env "document" $ seq [maketitle,
---                                  prop (env "abstract") abstract,
---                                  loop 0 doc]]
---     where properties (Heading msty str) = maybe [] (\sty -> [(sty, str)]) msty
---           properties (Paragraph msty str) = maybe [] (\sty -> [(sty, str)]) msty
---           properties (Content _ docs) = concatMap properties docs
---           properties (Section _ doc) = properties doc
+docToLatex :: Maybe Document -> Document -> String
+docToLatex mstyle doc =
+    let ps = properties doc 
+        title = lookup "Title" ps
+        author = lookup "Author" ps
+        date = lookup "Date" ps
+        abstract = lookup "Abstract" ps
+        maketitle = case mstyle of
+                      Nothing -> ""
+                      _ -> def "maketitle"
+    in
+      seq [comArgs "documentclass" ["a4paper"] "article",
+           comArgs "usepackage" ["utf8"] "inputenc",
+           prop (com "title") title,
+           prop (com "author") author,
+           prop (com "date") date,
+           env "document" $ seq [maketitle,
+                                 prop (env "abstract") abstract,
+                                 loop 0 doc]]
+    where properties (Heading docs) = concatMap properties docs
+          properties (Paragraph doc) = properties doc
+          properties (Content docs) = concatMap properties docs
+          properties (Section doc) = properties doc
 
---           lit = concatMap lit'
---               where lit' '#' = "\\#"
---                     lit' c = [c]
+          properties (Footnote _) = []
+          properties (Literal _) = []
+          properties (Style str doc) = [(str, loop 0 doc)]
 
---           nls = concatMap nls'
---               where nls' '\n' = "\\\\"
---                     nls' c = [c]
+          lit = concatMap lit'
+              where lit' '#' = "\\#"
+                    lit' c = [c]
 
---           def id = '\\':lit id
---           com id str = "\\" ++ lit id ++ "{" ++ lit str ++ "}"
---           comArgs id args str = "\\" ++ lit id ++ "[" ++ intercalate "," (map lit args) ++ "]{" ++ lit str ++ "}"
---           env id str = "\\begin{" ++ lit id ++ "}\n" ++ lit str ++ "\n\\end{" ++ lit id ++ "}"
+          nls = concatMap nls'
+              where nls' '\n' = "\\\\"
+                    nls' c = [c]
 
---           prop fn = maybe "" $ fn . lit
+          def id = '\\':lit id
+          com id str = "\\" ++ lit id ++ "{" ++ lit str ++ "}"
+          comArgs id args str = "\\" ++ lit id ++ "[" ++ intercalate "," (map lit args) ++ "]{" ++ lit str ++ "}"
+          env id str = "\\begin{" ++ lit id ++ "}\n" ++ lit str ++ "\n\\end{" ++ lit id ++ "}"
 
---           sec lvl str
---               | lvl < 3 = com (concat (replicate lvl "sub") ++ "section") $ nls str
---               | lvl == 3 = com "paragraph" $ nls str
---               | lvl == 4 = com "subparagraph" $ nls str
+          prop fn = maybe "" $ fn . lit
 
---           par = lit
+          sec lvl str
+              | lvl < 3 = com (concat (replicate lvl "sub") ++ "section") $ nls str
+              | lvl == 3 = com "paragraph" $ nls str
+              | lvl == 4 = com "subparagraph" $ nls str
 
---           seq = intercalate "\n\n" . filter (\ln -> trim ln /= "")
+          par = lit
 
---           loop lvl (Heading Nothing str) = sec lvl str
---           loop _ (Paragraph Nothing str) = par str
---           loop lvl (Content _ docs) = seq $ map (loop lvl) docs
---           loop lvl (Section _ doc) = loop (lvl + 1) doc
---           loop _ _ = ""
+          seq = intercalate "\n" . filter (\ln -> trim ln /= "")
+
+          loop lvl (Heading docs) = sec lvl $ intercalate "\n" $ map (loop lvl) docs
+          loop lvl (Paragraph doc) = loop lvl doc
+          loop lvl (Content docs) = seq $ map (loop lvl) docs
+          loop lvl (Section doc) = loop (lvl + 1) doc
+
+          loop lvl (Footnote str) = com "footnote" str
+          loop lvl (Literal str) = lit str
+          loop lvl (Style _ _) = ""
 
 
 -- | 'pdflatex' @outFp contents@ executes the 'pdflatex' 'Process'
@@ -451,7 +458,7 @@ data Flag
 -- appropriate formatter function.
 formatFn :: Flag -> Maybe Document -> Document -> String
 formatFn OutputDoc = const show
--- formatFn OutputLatex = docToLatex
+formatFn OutputLatex = docToLatex
 formatFn OutputPdf = formatFn OutputLatex
 formatFn OutputXml = docToXml
 formatFn fmt = error $ "unhandled case: " ++ show fmt
