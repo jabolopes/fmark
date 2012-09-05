@@ -313,14 +313,12 @@ docToLatex mstyle doc =
           properties (Paragraph msty str) = maybe [] (\sty -> [(sty, str)]) msty
           properties (Content _ docs) = concatMap properties docs
           properties (Section _ doc) = properties doc
-          
-          lit =
-              concatMap lit'
+
+          lit = concatMap lit'
               where lit' '#' = "\\#"
                     lit' c = [c]
 
-          nls =
-              concatMap nls'
+          nls = concatMap nls'
               where nls' '\n' = "\\\\"
                     nls' c = [c]
 
