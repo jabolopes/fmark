@@ -212,14 +212,14 @@ docify tks =
 -- style 'Document' @style@ in a single 'Document'.
 weaveStyle :: Document -> Document -> (Document, [String])
 weaveStyle doc style =
-    loop doc style
+    let (docs, errs) = loop doc style in (ensureDocument docs, errs)
     where msg title cnt desc sty =
               "In " ++ title ++ "\n"
                     ++ prefix "  " (show cnt) ++ "\n"
                     ++ desc ++ "\n"
                     ++ prefix "  " (show sty)
 
-          loop :: Document -> Document -> (Document, [String])
+          loop :: Document -> Document -> ([Document], [String])
           loop (Heading cnts) (Heading stys) =
               let errs | length cnts == length stys = []
                        | otherwise = [msg "Heading" cnts "does not match style" stys]
@@ -228,24 +228,25 @@ weaveStyle doc style =
                           [] -> []
                           _ -> [Heading unmatCnts]
               in
-                (Content $ [ Style sty cnt | cnt <- matCnts | Literal sty <- stys ] ++ hds, errs)
+                ([ Style sty cnt | cnt <- matCnts | Literal sty <- stys ] ++ hds, errs)
 
           loop (Paragraph cnt) (Paragraph (Literal sty)) =
-              (Style (init sty) cnt, [])
+              ([Style (init sty) cnt], [])
 
           loop doc@(Paragraph _) (Paragraph stys) =
-              (doc, [msg "Paragraph" doc "paragraph styles must be one line long" stys])
+              ([doc], [msg "Paragraph" doc "paragraph styles must be one line long" stys])
 
           loop (Content docs1) (Content docs2) =
               let (matDocs, unmatDocs) = splitAt (length docs2) docs1
-                  (docsSty', errss) = unzip [ loop doc1 doc2 | doc1 <- matDocs | doc2 <- docs2 ] in
-              (Content (docsSty' ++ unmatDocs), concat errss)
+                  (docsSty', errss) = unzip [ loop doc1 doc2 | doc1 <- matDocs | doc2 <- docs2 ]
+              in
+                ([Content (concat docsSty' ++ unmatDocs)], concat errss)
 
           loop (Section doc1) (Section doc2) =
               let (doc', errs) = loop doc1 doc2 in
-              (Section doc', errs)
+              ([Section $ ensureDocument doc'], errs)
 
-          loop doc _ = (doc, [show doc])
+          loop doc _ = ([doc], [show doc])
               
 
 -- | 'XmlState' is the XML generator state.
