@@ -26,13 +26,13 @@ filterLines :: [String] -> [String]
 filterLines lns = [ ln | ln <- lns, trim ln /= "" ]
 
 
--- | 'flatten' @str@ replaces newlines in @str@ with commas.
+-- | 'flatten' @c str@ replaces newlines in @str@ with @c@
 --
 -- > flatten "hello\ngoodbye" == "hello,goodbye"
-flatten :: String -> String
-flatten =
+flatten :: Char -> String -> String
+flatten c =
     map loop
-    where loop '\n' = ','
+    where loop '\n' = c
           loop c = c
 
 
@@ -136,10 +136,10 @@ classify str =
 data Document
     -- | 'Heading' is a 'Document' part with a style 'String' and
     -- heading content.
-    = Heading (Maybe String) [Document]
+    = Heading [Document]
     -- | 'Paragraph' is a 'Document' part with a style 'String' and
     -- paragraph content.
-    | Paragraph (Maybe String) [Document]
+    | Paragraph Document
     -- | 'Content' is a 'Document' part that represents a sequence of
     -- 'Document's.
     | Content [Document]
@@ -148,22 +148,24 @@ data Document
 
     | Footnote String
     | Literal String
+    | Style String Document
 
 showStyle Nothing = ""
 showStyle (Just sty) = "(" ++ sty ++ ")"
 
 instance Show Document where
-    show (Heading mstyle doc) = "Heading" ++ showStyle mstyle ++ " = " ++ show doc
-    show (Paragraph mstyle doc) = "Paragraph" ++ showStyle mstyle ++ " = " ++ show doc
+    show (Heading docs) = "Heading = " ++ show docs
+    show (Paragraph doc) = "Paragraph = " ++ show doc
     show (Content docs) = intercalate "\n" $ map show docs
     show (Section doc) = "begin\n" ++ show doc ++ "\nend"
 
     show (Footnote str) = "Footnote = " ++ str
     show (Literal str) = str
+    show (Style sty doc) = "Style(" ++ sty ++ ") = " ++ show doc
 
 
-reconstructParagraph :: String -> [Document]
-reconstructParagraph = loop
+reconstruct :: String -> [Document]
+reconstruct = loop
     where loop [] = []
           loop ('[':str) =
               case span (/= ']') str of
@@ -173,34 +175,36 @@ reconstructParagraph = loop
               Literal (trim hd):loop tl
               where (hd, tl) = span (/= '[') str
 
-reconstructHeading =
-    map (reconstruct' . reconstructParagraph) . lines
-    where reconstruct' [] = error "reconstruct: reconstruct': empty list"
-          reconstruct' [doc] = doc
-          reconstruct' docs = Content docs
+
+ensureDocument :: [Document] -> Document
+ensureDocument [doc] = doc
+ensureDocument docs = Content docs
 
 
 -- | 'docify' @tks@ parses the sequence of 'Token's @tks@ into a 'Document'.
 docify :: [Token] -> Document
 docify tks =
     loop tks [[]]
-    where loop :: [Token] -> [[Document]] -> Document
+    where reconstructParagraph :: String -> Document
+          reconstructParagraph = ensureDocument . reconstruct
+
+          reconstructHeading :: String -> [Document]
+          reconstructHeading = map reconstructParagraph . lines
+          
+          loop :: [Token] -> [[Document]] -> Document
           loop [] [doc] = Content $ reverse doc
           loop [] st = loop [EndSection] st
 
           loop (Text str:tks) (top:st) =
-              let doc = if isPunctuation $ last str then
-                             Paragraph Nothing (reconstructParagraph str)
-                         else
-                             Heading Nothing (reconstructHeading str)
-              in
               loop tks ((doc:top):st)
+              where doc | isPunctuation $ last str = Paragraph $ reconstructParagraph $ flatten ' ' str
+                        | otherwise = Heading $ reconstructHeading str
 
           loop (BeginSection:tks) st =
               loop tks ([]:st)
 
           loop (EndSection:tks) (top:bot:st) =
-              loop tks ((Section (Content $ reverse top):bot):st)
+              loop tks ((Section (ensureDocument $ reverse top):bot):st)
 
           loop tks st =
               error $ "\n\n\tloop: unhandled case" ++
@@ -219,30 +223,21 @@ weaveStyle doc style =
                     ++ prefix "  " (show sty)
 
           loop :: Document -> Document -> (Document, [String])
-          loop (Heading _ strLns) (Heading _ styLns) =
-              let errs = if length strLns == length styLns then
-                             []
-                         else
-                             [msg "Heading" strLns "does not match style" styLns]
-                  (withStyLns, noStyLns) = splitAt (length styLns) strLns
-                  hds = [ Heading (Just sty) [Literal str] | Literal str <- withStyLns | Literal sty <- styLns ]
-                        ++
-                        case noStyLns of
+          loop (Heading cnts) (Heading stys) =
+              let errs | length cnts == length stys = []
+                       | otherwise = [msg "Heading" cnts "does not match style" stys]
+                  (matCnts, unmatCnts) = splitAt (length stys) cnts
+                  hds = case unmatCnts of
                           [] -> []
-                          _ -> [Heading Nothing noStyLns]
+                          _ -> [Heading unmatCnts]
               in
-                case hds of
-                  [] -> error "weaveStyle: loop: headings are empty"
-                  [hd] -> (hd, errs)
-                  _ -> (Content hds, errs)
+                (Content $ [ Style sty cnt | cnt <- matCnts | Literal sty <- stys ] ++ hds, errs)
 
-          loop (Paragraph _ cnts) (Paragraph _ stys) =
-              -- currently, paragraph newlines are striped before getting here... is this true ?
-              let errs | length stys == 1 = []
-                       | otherwise = [msg "Paragraph" cnts "paragraph styles must be one line" stys]
-                  [Literal sty] = stys
-              in
-                (Paragraph (Just sty) cnts, [])
+          loop (Paragraph cnt) (Paragraph (Literal sty)) =
+              (Style (init sty) cnt, [])
+
+          loop doc@(Paragraph _) (Paragraph stys) =
+              (doc, [msg "Paragraph" doc "paragraph styles must be one line long" stys])
 
           loop (Content docs1) (Content docs2) =
               let (docsSty, docsNoSty) = splitAt (length docs2) docs1
@@ -290,9 +285,11 @@ getPrefix =
     do XmlState _ pre <- get
        return pre
 
+
 putPrefix :: Bool -> XmlM ()
 putPrefix pre =
     modify $ \(XmlState idn _) -> XmlState idn pre
+
 
 withPrefix :: Bool -> XmlM a -> XmlM a
 withPrefix pre m =
@@ -326,7 +323,6 @@ docToXml _ doc =
           xmlAttribute Nothing = []
           xmlAttribute (Just val) = [("style", val)]
 
-          xmlAttributes :: [(String, String)] -> String
           xmlAttributes [] = ""
           xmlAttributes attrs = ' ':unwords (map (\(id, val) -> id ++ "=\"" ++ val ++ "\"") attrs)
 
@@ -336,18 +332,25 @@ docToXml _ doc =
               concat <$> sequence [xmlIndent (return ("<" ++ tag ++ xmlAttributes attrs ++ ">")), withPrefix False m, return ("</" ++ tag ++ ">")]
 
           xmlLongTag attrs tag m =
-              concat <$> sequence [xmlIndent (return ("<" ++ tag ++ xmlAttributes attrs ++ ">\n")),
-                                   withIdn $ withPrefix True m,
-                                   return "\n",
-                                   xmlIndent (return ("</" ++ tag ++ ">"))]
+              do pre <- getPrefix
+                 if pre then
+                     concat <$> sequence [xmlIndent (return ("<" ++ tag ++ xmlAttributes attrs ++ ">\n")),
+                                          withIdn m,
+                                          return "\n",
+                                          xmlIndent (return ("</" ++ tag ++ ">"))]
+                 else
+                     xmlShortTag attrs tag m
 
-          loop (Heading mstyle docs) = xmlShortTag (xmlAttribute mstyle) "heading" $ intercalate " " <$> mapM loop docs
-          loop (Paragraph mstyle docs) = xmlShortTag (xmlAttribute mstyle) "paragraph" $ intercalate " " <$> mapM loop docs
-          loop (Content docs) = xmlLongTag [] "content" $ intercalate "\n" <$> mapM loop docs 
+          loop (Heading [doc]) = xmlShortTag [] "heading" $ loop doc
+          loop (Heading docs) = xmlLongTag [] "heading" $ intercalate "\n" <$> mapM loop docs
+          loop (Paragraph doc) = xmlShortTag [] "paragraph" $ loop doc
+          loop (Content [doc]) = xmlShortTag [] "content" $ loop doc
+          loop (Content docs) = xmlLongTag [] "content" $ intercalate "\n" <$> mapM loop docs
           loop (Section doc) = xmlLongTag [] "section" $ loop doc
 
           loop (Literal str) = xmlStr (return str)
           loop (Footnote str) = xmlShortTag [] "footnote" (return str)
+          loop (Style sty doc) = xmlShortTag [] sty $ loop doc
 
 
 -- | 'docToLatex' @mstyle doc@ formats a styled 'Document' @doc@ into
@@ -442,7 +445,7 @@ data Flag
     | OutputXml
     -- | Display usage information.
     | Help
-    | Style String
+    | StyleName String
       deriving (Eq, Show)
 
 
@@ -501,7 +504,7 @@ fmarkH fmt hIn eOut mstyle =
 options = [Option "d" ["doc"] (NoArg OutputDoc) "Output doc",
            Option "l" ["latex"] (NoArg OutputLatex) "Output latex",
            Option "p" ["pdf"] (NoArg OutputPdf) "Output PDF",
-           Option "s" ["style"] (ReqArg Style "style-name") "Style",
+           Option "s" ["style"] (ReqArg StyleName "style-name") "Style",
            Option "x" ["xml"] (NoArg OutputXml) "Output xml",
            Option [] ["help"] (NoArg Help) "Display help"]
 
@@ -530,12 +533,12 @@ main =
                     fmt = fmt' revOpts
                         where fmt' [] = OutputDoc
                               fmt' (Help:opts) = fmt' opts
-                              fmt' (Style _:opts) = fmt' opts
+                              fmt' (StyleName _:opts) = fmt' opts
                               fmt' (flag:opts) = flag
 
                     styleFn = style' revOpts
                         where style' [] = \fn -> fn Nothing
-                              style' (Style fp:opts) = \fn -> withFile fp ReadMode $ \h -> fn $ Just h
+                              style' (StyleName fp:opts) = \fn -> withFile fp ReadMode $ \h -> fn $ Just h
                               style' (_:opts) = style' opts
 
                     inFn = case nonOpts of
