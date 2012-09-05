@@ -267,7 +267,7 @@ docToXml _ doc =
 
           xmlAttributes :: [(String, String)] -> String
           xmlAttributes [] = ""
-          xmlAttributes attrs = " " ++ (intercalate " " $ map (\(id, val) -> id ++ "=\"" ++ val ++ "\"") attrs)
+          xmlAttributes attrs = ' ':unwords (map (\(id, val) -> id ++ "=\"" ++ val ++ "\"") attrs)
 
           xmlShortTag attrs tag str =
               do idn <- getIdn
