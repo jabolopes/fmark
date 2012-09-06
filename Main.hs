@@ -139,7 +139,7 @@ data Document
     = Heading Int String [Document]
     -- | 'Paragraph' is a 'Document' part with a style 'String' and
     -- paragraph content.
-    | Paragraph Int String Document
+    | Paragraph Int String [Document]
     -- | 'Content' is a 'Document' part that represents a sequence of
     -- 'Document's.
     | Content [Document]
@@ -188,11 +188,11 @@ isParagraph str =
 docify :: [Token] -> Document
 docify tks =
     loop tks [[]]
-    where reconstructParagraph :: String -> Document
-          reconstructParagraph = ensureDocument . reconstruct
+    where reconstructParagraph :: String -> [Document]
+          reconstructParagraph = reconstruct
 
           reconstructHeading :: String -> [Document]
-          reconstructHeading = map reconstructParagraph . lines
+          reconstructHeading = map (ensureDocument . reconstruct) . lines
           
           loop :: [Token] -> [[Document]] -> Document
           -- edit: this 'ensureDocument' is interfering with style weaving
@@ -242,8 +242,9 @@ weaveStyle doc style =
               in
                 (concat matCntss ++ unmatCnts', errs')
 
-          loop (Paragraph _ _ cnt) (Paragraph _ _ sty) =
-              loop cnt sty
+          loop (Paragraph _ _ cnts) (Paragraph _ _ stys) =
+              let (docss, errss) = unzip $ zipWith loop cnts stys in
+              (concat docss, concat errss)
 
           loop (Content docs1) (Content docs2) =
               let (matDocs, unmatDocs) = splitAt (length docs2) docs1
@@ -363,11 +364,11 @@ docToXml _ doc =
                  if pre then
                      xmlLongTag attrs tag $ intercalate "\n" <$> ms
                  else
-                     xmlLongTag attrs tag $ intercalate "" <$> ms
+                     xmlLongTag attrs tag $ concat <$> ms
 
           loop (Heading _ _ [doc]) = xmlShortTag [] "heading" $ loop doc
           loop (Heading _ _ docs) = xmlLongTags [] "heading" $ mapM loop docs
-          loop (Paragraph _ _ doc) = xmlShortTag [] "paragraph" $ loop doc
+          loop (Paragraph _ _ docs) = xmlShortTag [] "paragraph" $ concat <$> mapM loop docs
           loop (Content [doc]) = xmlShortTag [] "content" $ loop doc
           loop (Content docs) = xmlLongTags [] "content" $ mapM loop docs
           loop (Section doc) = xmlLongTag [] "section" $ loop doc
@@ -406,7 +407,7 @@ docToLatex mstyle doc =
           fulltitle (Just t) (Just s) = com "title" $ nls $ t ++ "\n" ++ com "large" s
           
           properties (Heading _ _ docs) = concatMap properties docs
-          properties (Paragraph _ _ doc) = properties doc
+          properties (Paragraph _ _ docs) = concatMap properties docs
           properties (Content docs) = concatMap properties docs
           properties (Section doc) = properties doc
 
@@ -439,7 +440,7 @@ docToLatex mstyle doc =
           seq = intercalate "\n" . filter (\ln -> trim ln /= "")
 
           loop lvl (Heading _ _ docs) = sec lvl $ intercalate "\n" $ map (loop lvl) docs
-          loop lvl (Paragraph _ _ doc) = loop lvl doc
+          loop lvl (Paragraph _ _ docs) = concat $ map (loop lvl) docs
           loop lvl (Content docs) = seq $ map (loop lvl) docs
           loop lvl (Section doc) = loop (lvl + 1) doc
 
