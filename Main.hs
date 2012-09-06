@@ -182,19 +182,25 @@ ensureDocument docs = Content docs
 docify :: [Token] -> Document
 docify tks =
     loop tks [[]]
-    where reconstructParagraph :: String -> Document
+    where isParagraph str =
+              isPunctuation c && c /= '[' && c /= ']'
+              where c = last str
+          
+          reconstructParagraph :: String -> Document
           reconstructParagraph = ensureDocument . reconstruct
 
           reconstructHeading :: String -> [Document]
           reconstructHeading = map reconstructParagraph . lines
           
           loop :: [Token] -> [[Document]] -> Document
-          loop [] [docs] = ensureDocument $ reverse docs
+          -- edit: this 'ensureDocument' is interfering with style weaving
+          -- loop [] [docs] = ensureDocument $ reverse docs
+          loop [] [docs] = Content $ reverse docs
           loop [] st = loop [EndSection] st
 
           loop (Text str:tks) (top:st) =
               loop tks ((doc:top):st)
-              where doc | isPunctuation $ last str = Paragraph $ reconstructParagraph $ replace ' ' str
+              where doc | isParagraph str = Paragraph $ reconstructParagraph $ replace ' ' str
                         | otherwise = Heading $ reconstructHeading str
 
           loop (BeginSection:tks) st =
@@ -207,6 +213,7 @@ docify tks =
               error $ "\n\n\tloop: unhandled case" ++
                       "\n\n\t tks = " ++ show tks ++
                       "\n\n\t st = " ++ show st ++ "\n\n"
+
 
 -- | 'weaveStyle' @doc style@ combines content 'Document' @doc@ and
 -- style 'Document' @style@ in a single 'Document'.
@@ -224,17 +231,23 @@ weaveStyle doc style =
               let errs | length cnts == length stys = []
                        | otherwise = [msg "Heading" cnts "does not match style" stys]
                   (matCnts, unmatCnts) = splitAt (length stys) cnts
-                  hds = case unmatCnts of
-                          [] -> []
-                          _ -> [Heading unmatCnts]
+                  unmatCnts' = case unmatCnts of
+                                   [] -> []
+                                   _ -> [Heading unmatCnts]
+                  (matCntss, errss) = unzip $ zipWith loop matCnts stys
+                  errs' | null errs = concat errss
+                        | otherwise = errs
               in
-                ([ Style sty cnt | cnt <- matCnts | Literal sty <- stys ] ++ hds, errs)
+                (concat matCntss ++ unmatCnts', errs')
 
           loop (Paragraph cnt) (Paragraph (Literal sty)) =
               ([Style (init sty) cnt], [])
 
-          loop doc@(Paragraph _) (Paragraph stys) =
-              ([doc], [msg "Paragraph" doc "paragraph styles must be paragraphs and one line long" stys])
+          loop doc@(Paragraph _) (Paragraph (Footnote sty)) =
+              ([doc], [msg "Paragraph" doc "paragraph styles cannot contain footnotes" sty])
+
+          loop doc@(Paragraph _) (Paragraph (Content stys)) =
+              ([doc], [msg "Paragraph" doc "paragraph styles must be one line long" stys])
 
           loop (Content docs1) (Content docs2) =
               let (matDocs, unmatDocs) = splitAt (length docs2) docs1
@@ -245,6 +258,12 @@ weaveStyle doc style =
           loop (Section doc1) (Section doc2) =
               let (doc', errs) = loop doc1 doc2 in
               ([Section $ ensureDocument doc'], errs)
+
+          loop cnt@(Literal _) (Literal sty) =
+              ([Style sty cnt], [])
+
+          loop (Footnote cnt) (Footnote sty) =
+              ([Style sty (Literal cnt)], [])
 
           loop doc _ = ([doc], [show doc])
               
@@ -327,7 +346,9 @@ docToXml _ doc =
           xmlStr = xmlIndent
 
           xmlShortTag attrs tag m =
-              concat <$> sequence [xmlIndent (return ("<" ++ tag ++ xmlAttributes attrs ++ ">")), withPrefix False m, return ("</" ++ tag ++ ">")]
+              concat <$> sequence [xmlIndent (return ("<" ++ tag ++ xmlAttributes attrs ++ ">")),
+                                   withPrefix False m,
+                                   return ("</" ++ tag ++ ">")]
 
           xmlLongTag attrs tag m =
               do pre <- getPrefix
@@ -339,14 +360,21 @@ docToXml _ doc =
                  else
                      xmlShortTag attrs tag m
 
+          xmlLongTags attrs tag ms =
+              do pre <- getPrefix
+                 if pre then
+                     xmlLongTag attrs tag $ intercalate "\n" <$> ms
+                 else
+                     xmlLongTag attrs tag $ intercalate "" <$> ms
+
           loop (Heading [doc]) = xmlShortTag [] "heading" $ loop doc
-          loop (Heading docs) = xmlLongTag [] "heading" $ intercalate "\n" <$> mapM loop docs
+          loop (Heading docs) = xmlLongTags [] "heading" $ mapM loop docs
           loop (Paragraph doc) = xmlShortTag [] "paragraph" $ loop doc
           loop (Content [doc]) = xmlShortTag [] "content" $ loop doc
-          loop (Content docs) = xmlLongTag [] "content" $ intercalate "\n" <$> mapM loop docs
+          loop (Content docs) = xmlLongTags [] "content" $ mapM loop docs
           loop (Section doc) = xmlLongTag [] "section" $ loop doc
 
-          loop (Literal str) = xmlStr (return str)
+          loop (Literal str) = xmlStr $ return str
           loop (Footnote str) = xmlShortTag [] "footnote" (return str)
           loop (Style sty doc) = xmlShortTag [] sty $ loop doc
 
@@ -358,6 +386,7 @@ docToLatex :: Maybe Document -> Document -> String
 docToLatex mstyle doc =
     let ps = properties doc 
         title = lookup "Title" ps
+        subtitle = lookup "Subtitle" ps
         author = lookup "Author" ps
         date = lookup "Date" ps
         abstract = lookup "Abstract" ps
@@ -367,13 +396,18 @@ docToLatex mstyle doc =
     in
       seq [comArgs "documentclass" ["a4paper"] "article",
            comArgs "usepackage" ["utf8"] "inputenc",
-           prop (com "title") title,
+           fulltitle title subtitle,
            prop (com "author") author,
            prop (com "date") date,
            env "document" $ seq [maketitle,
                                  prop (env "abstract") abstract,
                                  loop 0 doc]]
-    where properties (Heading docs) = concatMap properties docs
+    where fulltitle Nothing Nothing = ""
+          fulltitle (Just t) Nothing = com "title" t
+          fulltitle Nothing (Just s) = com "title" $ com "large" s
+          fulltitle (Just t) (Just s) = com "title" $ nls $ t ++ "\n" ++ com "large" s
+          
+          properties (Heading docs) = concatMap properties docs
           properties (Paragraph doc) = properties doc
           properties (Content docs) = concatMap properties docs
           properties (Section doc) = properties doc
