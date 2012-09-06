@@ -178,15 +178,17 @@ ensureDocument [doc] = doc
 ensureDocument docs = Content docs
 
 
+isParagraph :: String -> Bool
+isParagraph str =
+    isPunctuation c && c /= '[' && c /= ']'
+    where c = last str
+
+
 -- | 'docify' @tks@ parses the sequence of 'Token's @tks@ into a 'Document'.
 docify :: [Token] -> Document
 docify tks =
     loop tks [[]]
-    where isParagraph str =
-              isPunctuation c && c /= '[' && c /= ']'
-              where c = last str
-          
-          reconstructParagraph :: String -> Document
+    where reconstructParagraph :: String -> Document
           reconstructParagraph = ensureDocument . reconstruct
 
           reconstructHeading :: String -> [Document]
@@ -240,14 +242,8 @@ weaveStyle doc style =
               in
                 (concat matCntss ++ unmatCnts', errs')
 
-          loop (Paragraph cnt) (Paragraph (Literal sty)) =
-              ([Style (init sty) cnt], [])
-
-          loop doc@(Paragraph _) (Paragraph (Footnote sty)) =
-              ([doc], [msg "Paragraph" doc "paragraph styles cannot contain footnotes" sty])
-
-          loop doc@(Paragraph _) (Paragraph (Content stys)) =
-              ([doc], [msg "Paragraph" doc "paragraph styles must be one line long" stys])
+          loop (Paragraph cnt) (Paragraph sty) =
+              loop cnt sty
 
           loop (Content docs1) (Content docs2) =
               let (matDocs, unmatDocs) = splitAt (length docs2) docs1
@@ -260,7 +256,9 @@ weaveStyle doc style =
               ([Section $ ensureDocument doc'], errs)
 
           loop cnt@(Literal _) (Literal sty) =
-              ([Style sty cnt], [])
+              ([Style sty' cnt], [])
+              where sty' | isParagraph sty = init sty
+                         | otherwise = sty
 
           loop (Footnote cnt) (Footnote sty) =
               ([Style sty (Literal cnt)], [])
