@@ -86,7 +86,7 @@ trim = dropWhileEnd isSpace . dropWhile isSpace
 data Token
     -- | 'Text' corresponds to successive lines of text joined
     -- together.
-    = Text String
+    = Text Int String
     -- | 'BeginSection' represents the beginning of a new section,
     -- i.e., increase in indentation or an unmatched decrease in indentation.
     | BeginSection
@@ -111,23 +111,23 @@ section (idn1:idns) idn2 =
 -- | 'reduce' @idns ln@ is the 'List' containing the 'Text' 'Token'
 -- holding @ln@ preceeded by the appropriate section 'Token's as
 -- issued by 'section' according to the indentation stack @idns@.
-reduce :: [Int] -> String -> [Token]
-reduce idns ln = section idns (indentation ln) ++ [Text $ trim ln]
+reduce :: [Int] -> Int -> String -> [Token]
+reduce idns n ln = section idns (indentation ln) ++ [Text n $ trim ln]
 
 
 -- | 'classify' @str@ is the 'List' of 'Token's of @str@.
 classify :: String -> [Token]
 classify str =
-    classify' [0] $ lines str
+    classify' [0] $ zip [1..] $ lines str
         where classify' _ [] = []
-              classify' _ [ln] | all isSpace ln = []
-              classify' idns (ln1:lns) | all isSpace ln1 = classify' idns lns
-              classify' idns [ln] = reduce idns ln
-              classify' idns (ln1:ln2:lns)
-                  | all isSpace ln2 = reduce idns ln1 ++ classify' (push idn1 (dropWhile (> idn1) idns)) lns
-                  | idn1 < idn2 = reduce idns ln1 ++ classify' (push idn1 (dropWhile (> idn1) idns)) (ln2:lns)
-                  | idn1 > idn2 = reduce idns ln1 ++ classify' (push idn1 idns) (ln2:lns)
-                  | otherwise = classify' idns (join ln1 ln2:lns)
+              classify' _ [(_, ln)] | all isSpace ln = []
+              classify' idns ((_, ln1):lns) | all isSpace ln1 = classify' idns lns
+              classify' idns [(n, ln)] = reduce idns n ln
+              classify' idns ((n1, ln1):(n2, ln2):lns)
+                  | all isSpace ln2 = reduce idns n1 ln1 ++ classify' (push idn1 (dropWhile (> idn1) idns)) lns
+                  | idn1 < idn2 = reduce idns n1 ln1 ++ classify' (push idn1 (dropWhile (> idn1) idns)) ((n2, ln2):lns)
+                  | idn1 > idn2 = reduce idns n1 ln1 ++ classify' (push idn1 idns) ((n2, ln2):lns)
+                  | otherwise = classify' idns ((n1, join ln1 ln2):lns)
                   where idn1 = indentation ln1
                         idn2 = indentation ln2
 
@@ -136,10 +136,10 @@ classify str =
 data Document
     -- | 'Heading' is a 'Document' part with a style 'String' and
     -- heading content.
-    = Heading [Document]
+    = Heading Int String [Document]
     -- | 'Paragraph' is a 'Document' part with a style 'String' and
     -- paragraph content.
-    | Paragraph Document
+    | Paragraph Int String Document
     -- | 'Content' is a 'Document' part that represents a sequence of
     -- 'Document's.
     | Content [Document]
@@ -151,8 +151,8 @@ data Document
     | Style String Document
 
 instance Show Document where
-    show (Heading docs) = "Heading = " ++ show docs
-    show (Paragraph doc) = "Paragraph = " ++ show doc
+    show (Heading _ _ docs) = "Heading = " ++ show docs
+    show (Paragraph _ _ doc) = "Paragraph = " ++ show doc
     show (Content docs) = intercalate "\n" $ map show docs
     show (Section doc) = "begin\n" ++ show doc ++ "\nend"
 
@@ -200,10 +200,10 @@ docify tks =
           loop [] [docs] = Content $ reverse docs
           loop [] st = loop [EndSection] st
 
-          loop (Text str:tks) (top:st) =
+          loop (Text n str:tks) (top:st) =
               loop tks ((doc:top):st)
-              where doc | isParagraph str = Paragraph $ reconstructParagraph $ replace ' ' str
-                        | otherwise = Heading $ reconstructHeading str
+              where doc | isParagraph str = Paragraph n str $ reconstructParagraph $ replace ' ' str
+                        | otherwise = Heading n str $ reconstructHeading str
 
           loop (BeginSection:tks) st =
               loop tks ([]:st)
@@ -222,27 +222,27 @@ docify tks =
 weaveStyle :: Document -> Document -> (Document, [String])
 weaveStyle doc style =
     let (docs, errs) = loop doc style in (ensureDocument docs, errs)
-    where msg title cnt desc sty =
-              "In " ++ title ++ "\n"
-                    ++ prefix "  " (show cnt) ++ "\n"
-                    ++ desc ++ "\n"
-                    ++ prefix "  " (show sty)
+    where msg n cnt title desc sty =
+              intercalate "\n" ["In line " ++ show n ++ ", " ++ title,
+                                prefix "  " cnt,
+                                desc,
+                                prefix "  " sty]
 
           loop :: Document -> Document -> ([Document], [String])
-          loop (Heading cnts) (Heading stys) =
+          loop (Heading n cntStr cnts) (Heading _ styStr stys) =
               let errs | length cnts == length stys = []
-                       | otherwise = [msg "Heading" cnts "does not match style" stys]
+                       | otherwise = [msg n cntStr "heading" "does not match style" styStr]
                   (matCnts, unmatCnts) = splitAt (length stys) cnts
                   unmatCnts' = case unmatCnts of
                                    [] -> []
-                                   _ -> [Heading unmatCnts]
+                                   _ -> [Heading n cntStr unmatCnts]
                   (matCntss, errss) = unzip $ zipWith loop matCnts stys
                   errs' | null errs = concat errss
                         | otherwise = errs
               in
                 (concat matCntss ++ unmatCnts', errs')
 
-          loop (Paragraph cnt) (Paragraph sty) =
+          loop (Paragraph _ _ cnt) (Paragraph _ _ sty) =
               loop cnt sty
 
           loop (Content docs1) (Content docs2) =
@@ -365,9 +365,9 @@ docToXml _ doc =
                  else
                      xmlLongTag attrs tag $ intercalate "" <$> ms
 
-          loop (Heading [doc]) = xmlShortTag [] "heading" $ loop doc
-          loop (Heading docs) = xmlLongTags [] "heading" $ mapM loop docs
-          loop (Paragraph doc) = xmlShortTag [] "paragraph" $ loop doc
+          loop (Heading _ _ [doc]) = xmlShortTag [] "heading" $ loop doc
+          loop (Heading _ _ docs) = xmlLongTags [] "heading" $ mapM loop docs
+          loop (Paragraph _ _ doc) = xmlShortTag [] "paragraph" $ loop doc
           loop (Content [doc]) = xmlShortTag [] "content" $ loop doc
           loop (Content docs) = xmlLongTags [] "content" $ mapM loop docs
           loop (Section doc) = xmlLongTag [] "section" $ loop doc
@@ -405,8 +405,8 @@ docToLatex mstyle doc =
           fulltitle Nothing (Just s) = com "title" $ com "large" s
           fulltitle (Just t) (Just s) = com "title" $ nls $ t ++ "\n" ++ com "large" s
           
-          properties (Heading docs) = concatMap properties docs
-          properties (Paragraph doc) = properties doc
+          properties (Heading _ _ docs) = concatMap properties docs
+          properties (Paragraph _ _ doc) = properties doc
           properties (Content docs) = concatMap properties docs
           properties (Section doc) = properties doc
 
@@ -438,8 +438,8 @@ docToLatex mstyle doc =
 
           seq = intercalate "\n" . filter (\ln -> trim ln /= "")
 
-          loop lvl (Heading docs) = sec lvl $ intercalate "\n" $ map (loop lvl) docs
-          loop lvl (Paragraph doc) = loop lvl doc
+          loop lvl (Heading _ _ docs) = sec lvl $ intercalate "\n" $ map (loop lvl) docs
+          loop lvl (Paragraph _ _ doc) = loop lvl doc
           loop lvl (Content docs) = seq $ map (loop lvl) docs
           loop lvl (Section doc) = loop (lvl + 1) doc
 
