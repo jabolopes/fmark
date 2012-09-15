@@ -247,10 +247,12 @@ weaveStyle doc style =
               (concat docss, concat errss)
 
           loop (Content docs1) (Content docs2) =
-              let (matDocs, unmatDocs) = splitAt (length docs2) docs1
+              let errs | length docs1 < length docs2 = ["content: " ++ show docs1 ++ " does not match style " ++ show docs2]
+                       | otherwise = []
+                  (matDocs, unmatDocs) = splitAt (length docs2) docs1
                   (docsSty', errss) = unzip [ loop doc1 doc2 | doc1 <- matDocs | doc2 <- docs2 ]
               in
-                ([Content (concat docsSty' ++ unmatDocs)], concat errss)
+                ([Content (concat docsSty' ++ unmatDocs)], errs ++ concat errss)
 
           loop (Section doc1) (Section doc2) =
               let (doc', errs) = loop doc1 doc2 in
