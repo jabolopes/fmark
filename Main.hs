@@ -64,6 +64,15 @@ prefix pre str =
                                  _ -> [c])
 
 
+prefixArrow :: Int -> String -> String -> String
+prefixArrow i pre str =
+    unlines [ if i == j then
+                  '>':tail pre ++ ln
+              else
+                  pre ++ ln | ln <- lines str
+                            | j <- [1..] ]
+
+
 -- | 'push' @x xs@ adds @x@ to @xs@ only if the first element in @xs@
 -- is different from @x@.
 --
@@ -86,7 +95,7 @@ trim = dropWhileEnd isSpace . dropWhile isSpace
 data Token
     -- | 'Text' corresponds to successive lines of text joined
     -- together.
-    = Text Int String
+    = Literal Int String
     -- | 'BeginSection' represents the beginning of a new section,
     -- i.e., increase in indentation or an unmatched decrease in indentation.
     | BeginSection
@@ -112,7 +121,7 @@ section (idn1:idns) idn2 =
 -- holding @ln@ preceeded by the appropriate section 'Token's as
 -- issued by 'section' according to the indentation stack @idns@.
 reduce :: [Int] -> Int -> String -> [Token]
-reduce idns n ln = section idns (indentation ln) ++ [Text n $ trim ln]
+reduce idns n ln = section idns (indentation ln) ++ [Literal n $ trim ln]
 
 
 -- | 'classify' @str@ is the 'List' of 'Token's of @str@.
@@ -132,44 +141,51 @@ classify str =
                         idn2 = indentation ln2
 
 
+data Text = Footnote String
+          | Plain String
+
+instance Show Text where
+    show (Footnote str) = "[" ++ str ++ "]"
+    show (Plain str) = str
+
+
+type Srcloc = (Int, String)
+
+
 -- | 'Document' is a structured representation of the input.
 data Document
     -- | 'Heading' is a 'Document' part with a style 'String' and
     -- heading content.
-    = Heading Int String [Document]
+    = Heading Srcloc [[Text]]
     -- | 'Paragraph' is a 'Document' part with a style 'String' and
     -- paragraph content.
-    | Paragraph Int String [Document]
+    | Paragraph Srcloc [Text]
     -- | 'Content' is a 'Document' part that represents a sequence of
     -- 'Document's.
     | Content [Document]
     -- | 'Section' is a 'Document' part that represents a subsection.
     | Section Document
 
-    | Footnote String
-    | Literal String
-    | Style String Document
+    | Style String Text
 
 instance Show Document where
-    show (Heading _ _ docs) = "Heading = " ++ show docs
-    show (Paragraph _ _ doc) = "Paragraph = " ++ show doc
+    show (Heading _ docs) = "Heading = " ++ show docs
+    show (Paragraph _ doc) = "Paragraph = " ++ show doc
     show (Content docs) = intercalate "\n" $ map show docs
     show (Section doc) = "begin\n" ++ show doc ++ "\nend"
 
-    show (Footnote str) = "Footnote = " ++ str
-    show (Literal str) = str
-    show (Style sty doc) = "Style(" ++ sty ++ ") = " ++ show doc
+    show (Style sty str) = "(" ++ sty ++ ") = " ++ show str
 
 
-reconstruct :: String -> [Document]
+reconstruct :: String -> [Text]
 reconstruct = loop
     where loop [] = []
           loop ('[':str) =
               case span (/= ']') str of
-                (hd, []) -> [Literal $ trim hd]
-                (hd, _:tl) -> Footnote (trim hd):loop tl
+                (hd, []) -> [Plain hd]
+                (hd, _:tl) -> Footnote hd:loop tl
           loop str =
-              Literal (trim hd):loop tl
+              Plain hd:loop tl
               where (hd, tl) = span (/= '[') str
 
 
@@ -188,11 +204,11 @@ isParagraph str =
 docify :: [Token] -> Document
 docify tks =
     loop tks [[]]
-    where reconstructParagraph :: String -> [Document]
+    where reconstructParagraph :: String -> [Text]
           reconstructParagraph = reconstruct
 
-          reconstructHeading :: String -> [Document]
-          reconstructHeading = map (ensureDocument . reconstruct) . lines
+          reconstructHeading :: String -> [[Text]]
+          reconstructHeading = map reconstruct . lines
           
           loop :: [Token] -> [[Document]] -> Document
           -- edit: this 'ensureDocument' is interfering with style weaving
@@ -200,10 +216,10 @@ docify tks =
           loop [] [docs] = Content $ reverse docs
           loop [] st = loop [EndSection] st
 
-          loop (Text n str:tks) (top:st) =
+          loop (Literal n str:tks) (top:st) =
               loop tks ((doc:top):st)
-              where doc | isParagraph str = Paragraph n str $ reconstructParagraph $ replace ' ' str
-                        | otherwise = Heading n str $ reconstructHeading str
+              where doc | isParagraph str = Paragraph (n, str) $ reconstructParagraph $ replace ' ' str
+                        | otherwise = Heading (n, str) $ reconstructHeading str
 
           loop (BeginSection:tks) st =
               loop tks ([]:st)
@@ -228,23 +244,50 @@ weaveStyle doc style =
                                 desc,
                                 prefix "  " sty]
 
-          loop :: Document -> Document -> ([Document], [String])
-          loop (Heading n cntStr cnts) (Heading _ styStr stys) =
-              let errs | length cnts == length stys = []
-                       | otherwise = [msg n cntStr "heading" "does not match style" styStr]
-                  (matCnts, unmatCnts) = splitAt (length stys) cnts
-                  unmatCnts' = case unmatCnts of
-                                   [] -> []
-                                   _ -> [Heading n cntStr unmatCnts]
-                  (matCntss, errss) = unzip $ zipWith loop matCnts stys
-                  errs' | null errs = concat errss
-                        | otherwise = errs
-              in
-                (concat matCntss ++ unmatCnts', errs')
+          msgArrow :: Int -> Int -> String -> String -> String -> String
+          msgArrow n i title cnt sty =
+              intercalate "\n" ["In line " ++ show (n + i - 1) ++ ", in " ++ title,
+                                prefixArrow i "  " cnt,
+                                "does not match style",
+                                prefixArrow i "  " sty]
 
-          loop (Paragraph _ _ cnts) (Paragraph _ _ stys) =
-              let (docss, errss) = unzip $ zipWith loop cnts stys in
-              (concat docss, concat errss)
+
+          weaveText :: Text -> Text -> Maybe Document
+          weaveText (Footnote cnt) (Footnote sty) = Just $ Style (trim sty) $ Plain $ trim cnt
+          weaveText text@(Plain cnt) (Plain sty) = Just $ Style (trim sty') $ Plain $ trim cnt
+              where sty' | isParagraph sty = init sty
+                         | otherwise = sty
+          weaveText text1 text2 = Nothing
+
+
+          weaveLine :: [Text] -> [Text] -> Maybe [Document]
+          weaveLine txts1 txts2 | length txts1 /= length txts2 = Nothing
+          weaveLine txts1 txts2 = zipWithM weaveText txts1 txts2
+
+
+          weaveLines :: [[Text]] -> [[Text]] -> Maybe [[Document]]
+          weaveLines lns1 lns2 | length lns1 /= length lns2 = Nothing
+          weaveLines lns1 lns2 = zipWithM weaveLine lns1 lns2
+
+
+          headingMsg (n, cntStr) (_, styStr) =
+              msg n cntStr "heading" "does not match style" styStr
+
+
+          paragraphMsg (n, cntStr) (_, styStr) =
+              msg n cntStr "paragraph" "does not match style" styStr
+
+
+          loop :: Document -> Document -> ([Document], [String])
+          loop cnt@(Heading loc1 lns1) (Heading loc2 lns2) =
+              case weaveLines lns1 lns2 of
+                Nothing -> ([cnt], [headingMsg loc1 loc2])
+                Just docs -> (concat docs, [])
+
+          loop cnt@(Paragraph loc1 txts1) (Paragraph loc2 txts2) =
+              case weaveLine txts1 txts2 of
+                Nothing -> ([cnt], [paragraphMsg loc1 loc2])
+                Just docs -> (docs, [])
 
           loop (Content docs1) (Content docs2) =
               let errs | length docs1 < length docs2 = ["content: " ++ show docs1 ++ " does not match style " ++ show docs2]
@@ -257,14 +300,6 @@ weaveStyle doc style =
           loop (Section doc1) (Section doc2) =
               let (doc', errs) = loop doc1 doc2 in
               ([Section $ ensureDocument doc'], errs)
-
-          loop cnt@(Literal _) (Literal sty) =
-              ([Style sty' cnt], [])
-              where sty' | isParagraph sty = init sty
-                         | otherwise = sty
-
-          loop (Footnote cnt) (Footnote sty) =
-              ([Style sty (Literal cnt)], [])
 
           loop doc _ = ([doc], [show doc])
               
@@ -326,8 +361,6 @@ docToXml _ doc =
     intercalate "\n" ["<xml>", str, "</xml>"]
     where str = evalState (loop doc) (XmlState 2 True)
 
-          --xmlIndent lvl str = replicate lvl ' ' ++ str
-
           xmlIndent :: XmlM String -> XmlM String
           xmlIndent m =
               do idn <- getIdn
@@ -346,6 +379,7 @@ docToXml _ doc =
 
           xmlStr = xmlIndent
 
+          xmlShortTag :: [(String, String)] -> String -> XmlM String -> XmlM String
           xmlShortTag attrs tag m =
               concat <$> sequence [xmlIndent (return ("<" ++ tag ++ xmlAttributes attrs ++ ">")),
                                    withPrefix False m,
@@ -361,94 +395,97 @@ docToXml _ doc =
                  else
                      xmlShortTag attrs tag m
 
+          xmlLongTags :: [(String, String)] -> String -> [XmlM String] -> XmlM String
           xmlLongTags attrs tag ms =
               do pre <- getPrefix
                  if pre then
-                     xmlLongTag attrs tag $ intercalate "\n" <$> ms
+                     xmlLongTag attrs tag $ intercalate "\n" <$> sequence ms
                  else
-                     xmlLongTag attrs tag $ concat <$> ms
+                     xmlLongTag attrs tag $ concat <$> sequence ms
 
-          loop (Heading _ _ [doc]) = xmlShortTag [] "heading" $ loop doc
-          loop (Heading _ _ docs) = xmlLongTags [] "heading" $ mapM loop docs
-          loop (Paragraph _ _ docs) = xmlShortTag [] "paragraph" $ concat <$> mapM loop docs
+          loopText :: Text -> XmlM String
+          loopText (Footnote str) = withPrefix False $ xmlShortTag [] "footnote" $ return str
+          loopText (Plain str) = xmlStr $ return str
+
+          loop :: Document -> XmlM String
+          loop (Heading _ [txts]) = xmlShortTag [] "heading" $ concat <$> mapM loopText txts
+          loop (Heading _ lns) = xmlLongTags [] "heading" [ concat <$> mapM loopText txts | txts <- lns ]
+          loop (Paragraph _ txts) = xmlShortTag [] "paragraph" $ concat <$> mapM loopText txts
           loop (Content [doc]) = xmlShortTag [] "content" $ loop doc
-          loop (Content docs) = xmlLongTags [] "content" $ mapM loop docs
+          loop (Content docs) = xmlLongTags [] "content" $ map loop docs
           loop (Section doc) = xmlLongTag [] "section" $ loop doc
-
-          loop (Literal str) = xmlStr $ return str
-          loop (Footnote str) = xmlShortTag [] "footnote" (return str)
-          loop (Style sty doc) = xmlShortTag [] sty $ loop doc
+          loop (Style sty txt) = xmlShortTag [] sty $ loopText txt
 
 
 -- | 'docToLatex' @mstyle doc@ formats a styled 'Document' @doc@ into
 -- a LaTeX 'String', where @mstyle@ specifies the style 'Document'
 -- used to stylize @doc@.
-docToLatex :: Maybe Document -> Document -> String
-docToLatex mstyle doc =
-    let ps = properties doc 
-        title = lookup "Title" ps
-        subtitle = lookup "Subtitle" ps
-        author = lookup "Author" ps
-        date = lookup "Date" ps
-        abstract = lookup "Abstract" ps
-        maketitle = case (title, author, date) of
-                      (Just _, Just _, Just _) -> def "maketitle"
-                      _ -> ""
-    in
-      seq [comArgs "documentclass" ["a4paper"] "article",
-           comArgs "usepackage" ["utf8"] "inputenc",
-           fulltitle title subtitle,
-           prop (com "author") author,
-           prop (com "date") date,
-           env "document" $ seq [maketitle,
-                                 prop (env "abstract") abstract,
-                                 loop 0 doc]]
-    where fulltitle Nothing Nothing = ""
-          fulltitle (Just t) Nothing = com "title" t
-          fulltitle Nothing (Just s) = com "title" $ com "large" s
-          fulltitle (Just t) (Just s) = com "title" $ nls $ t ++ "\n" ++ com "large" s
+-- docToLatex :: Maybe Document -> Document -> String
+-- docToLatex mstyle doc =
+--     let ps = properties doc 
+--         title = lookup "Title" ps
+--         subtitle = lookup "Subtitle" ps
+--         author = lookup "Author" ps
+--         date = lookup "Date" ps
+--         abstract = lookup "Abstract" ps
+--         maketitle = case (title, author, date) of
+--                       (Just _, Just _, Just _) -> def "maketitle"
+--                       _ -> ""
+--     in
+--       seq [comArgs "documentclass" ["a4paper"] "article",
+--            comArgs "usepackage" ["utf8"] "inputenc",
+--            fulltitle title subtitle,
+--            prop (com "author") author,
+--            prop (com "date") date,
+--            env "document" $ seq [maketitle,
+--                                  prop (env "abstract") abstract,
+--                                  loop 0 doc]]
+--     where fulltitle Nothing Nothing = ""
+--           fulltitle (Just t) Nothing = com "title" t
+--           fulltitle Nothing (Just s) = com "title" $ com "large" s
+--           fulltitle (Just t) (Just s) = com "title" $ nls $ t ++ "\n" ++ com "large" s
           
-          properties (Heading _ _ docs) = concatMap properties docs
-          properties (Paragraph _ _ docs) = concatMap properties docs
-          properties (Content docs) = concatMap properties docs
-          properties (Section doc) = properties doc
+--           properties (Heading _ docs) = concatMap properties docs
+--           properties (Paragraph _ docs) = concatMap properties docs
+--           properties (Content docs) = concatMap properties docs
+--           properties (Section doc) = properties doc
 
-          properties (Footnote _) = []
-          properties (Literal _) = []
-          properties (Style str doc) = [(str, loop 0 doc)]
+--           properties (Footnote _) = []
+--           properties (Plain _) = []
+--           properties (Style str doc) = [(str, loop 0 doc)]
 
-          lit = concatMap lit'
-              where lit' '#' = "\\#"
-                    lit' c = [c]
+--           lit = concatMap lit'
+--               where lit' '#' = "\\#"
+--                     lit' c = [c]
 
-          nls = concatMap nls'
-              where nls' '\n' = "\\\\"
-                    nls' c = [c]
+--           nls = concatMap nls'
+--               where nls' '\n' = "\\\\"
+--                     nls' c = [c]
 
-          def id = '\\':lit id
-          com id str = "\\" ++ lit id ++ "{" ++ lit str ++ "}"
-          comArgs id args str = "\\" ++ lit id ++ "[" ++ intercalate "," (map lit args) ++ "]{" ++ lit str ++ "}"
-          env id str = "\\begin{" ++ lit id ++ "}\n" ++ lit str ++ "\n\\end{" ++ lit id ++ "}"
+--           def id = '\\':lit id
+--           com id str = "\\" ++ lit id ++ "{" ++ lit str ++ "}"
+--           comArgs id args str = "\\" ++ lit id ++ "[" ++ intercalate "," (map lit args) ++ "]{" ++ lit str ++ "}"
+--           env id str = "\\begin{" ++ lit id ++ "}\n" ++ lit str ++ "\n\\end{" ++ lit id ++ "}"
 
-          prop fn = maybe "" $ fn . lit
+--           prop fn = maybe "" $ fn . lit
 
-          sec lvl str
-              | lvl < 3 = com (concat (replicate lvl "sub") ++ "section") $ nls str
-              | lvl == 3 = com "paragraph" $ nls str
-              | lvl == 4 = com "subparagraph" $ nls str
+--           sec lvl str
+--               | lvl < 3 = com (concat (replicate lvl "sub") ++ "section") $ nls str
+--               | lvl == 3 = com "paragraph" $ nls str
+--               | lvl == 4 = com "subparagraph" $ nls str
 
-          par = lit
+--           par = lit
 
-          seq = intercalate "\n" . filter (\ln -> trim ln /= "")
+--           seq = intercalate "\n" . filter (\ln -> trim ln /= "")
 
-          loop lvl (Heading _ _ docs) = sec lvl $ intercalate "\n" $ map (loop lvl) docs
-          loop lvl (Paragraph _ _ docs) = concat $ map (loop lvl) docs
-          loop lvl (Content docs) = seq $ map (loop lvl) docs
-          loop lvl (Section doc) = loop (lvl + 1) doc
+--           loop lvl (Heading _ _ docs) = sec lvl $ intercalate "\n" $ map (loop lvl) docs
+--           loop lvl (Paragraph _ _ docs) = concat $ map (loop lvl) docs
+--           loop lvl (Content docs) = seq $ map (loop lvl) docs
+--           loop lvl (Section doc) = loop (lvl + 1) doc
 
-          loop lvl (Footnote str) = com "footnote" str
-          loop lvl (Literal str) = lit str
-          loop lvl (Style _ _) = ""
+--           loop lvl (Footnote str) = com "footnote" str
+--           loop lvl (Plain str) = lit str
+--           loop lvl (Style _ _) = ""
 
 
 -- | 'pdflatex' @outFp contents@ executes the 'pdflatex' 'Process'
@@ -493,7 +530,7 @@ data Flag
 -- appropriate formatter function.
 formatFn :: Flag -> Maybe Document -> Document -> String
 formatFn OutputDoc = const show
-formatFn OutputLatex = docToLatex
+-- formatFn OutputLatex = docToLatex
 formatFn OutputPdf = formatFn OutputLatex
 formatFn OutputXml = docToXml
 formatFn fmt = error $ "unhandled case: " ++ show fmt
