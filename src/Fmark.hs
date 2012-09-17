@@ -1,94 +1,20 @@
 {-# LANGUAGE ParallelListComp #-}
-module Main where
-
-import Prelude hiding (lex)
+module Fmark where
 
 import Control.Monad ((>=>))
 import Control.Monad.State hiding (join)
 
-import Data.Char
-import Data.Functor
-import Data.List
+import Data.Char (isPunctuation, isSpace)
+import Data.Functor ((<$>))
+import Data.List (intercalate)
 
-import System.Console.GetOpt
-import System.Directory
-import System.Environment
-import System.FilePath
+import System.Directory (copyFile)
+import System.FilePath (addExtension, dropExtensions, combine)
 import System.IO
-import System.IO.Error
 import System.Process
-import System.Unix.Directory hiding (find)
+import System.Unix.Directory (withTemporaryDirectory)
 
-
--- | 'filterLines' @lns@ filters empty lines and lines containing only
--- space characters from @lns@.
-filterLines :: [String] -> [String]
-filterLines lns = [ ln | ln <- lns, trim ln /= "" ]
-
-
--- | 'replace' @c str@ replaces newlines in @str@ with @c@
---
--- > replace "hello\ngoodbye" == "hello,goodbye"
-replace :: Char -> String -> String
-replace c =
-    map loop
-    where loop '\n' = c
-          loop c = c
-
-
--- | 'indentation' @ln@ is the number of space characters at the
--- begining of @ln@.
---
--- > indentation "\t hello" == 2
-indentation :: String -> Int
-indentation ln = length $ takeWhile isSpace ln
-
-
--- | 'join' @str1 str2@ appends @str1@ and @str2@ ensuring that is
--- only a single newline space character between them.
---
--- > join "hello \n" "\t goodbye" == "hello\ngoodbye"
-join :: String -> String -> String
-join str1 str2 = dropWhileEnd isSpace str1 ++ "\n" ++ dropWhile isSpace str2
-
-
--- | 'prefix' @pre str@ prepends all lines in 'str' with 'pre'.
---
--- > prefix "->" "hello\ngoodbye" == "->hello\n->goodbye"
-prefix :: String -> String -> String
-prefix pre str =
-    pre ++ prefix' str
-    where prefix' =
-              concatMap (\c -> case c of
-                                 '\n' -> '\n':pre
-                                 _ -> [c])
-
-
-prefixArrow :: Int -> String -> String -> String
-prefixArrow i pre str =
-    unlines [ if i == j then
-                  '>':tail pre ++ ln
-              else
-                  pre ++ ln | ln <- lines str
-                            | j <- [1..] ]
-
-
--- | 'push' @x xs@ adds @x@ to @xs@ only if the first element in @xs@
--- is different from @x@.
---
--- > push 1 [2,3] == [1,2,3]
--- > push 1 [1,3] == [1,3]
-push :: Eq a => a -> [a] -> [a]
-push x (y:ys) | x /= y = x:y:ys
-push _ xs = xs
-
-
--- | 'trim' @str@ removes leading and trailing space characters from
--- @str@.
---
--- > trim "\t hello \n" == "hello"
-trim :: String -> String
-trim = dropWhileEnd isSpace . dropWhile isSpace
+import Utils
 
 
 -- | 'Token' is an unstructured representation of the input.
@@ -575,54 +501,3 @@ fmarkH fmt hIn eOut mstyle =
          [] -> return ()
          _ -> do hPutStrLn stderr "Style warnings:"
                  mapM_ (hPutStrLn stderr) errs
-
-
--- | 'options' represents the command line options.
-options = [Option "d" ["doc"] (NoArg OutputDoc) "Output doc",
-           Option "l" ["latex"] (NoArg OutputLatex) "Output latex",
-           Option "p" ["pdf"] (NoArg OutputPdf) "Output PDF",
-           Option "s" ["style"] (ReqArg StyleName "style-name") "Style",
-           Option "x" ["xml"] (NoArg OutputXml) "Output xml",
-           Option [] ["help"] (NoArg Help) "Display help"]
-
-
--- | 'main'.
-main =
-    do args <- getArgs
-       case getOpt Permute options args of
-         (opts, nonOpts, []) -> processOpts opts nonOpts
-         (_, _, errs) -> do putErrors errs
-                            putUsage
-    where header progName = "Usage: " ++ progName ++ " [OPTION...] files..."
-
-          putUsage =
-              do progName <- getProgName
-                 hPutStr stderr $ usageInfo (header progName) options
-
-          putErrors errs =
-              hPutStrLn stderr $ intercalate ", " $ map (dropWhileEnd (== '\n')) errs
-          
-          processOpts opts _ | Help `elem` opts = putUsage
-          processOpts opts nonOpts =
-              styleFn $ \mstyle -> (inFn $ \hIn -> fmarkH fmt hIn eOut mstyle)
-              where revOpts = reverse opts
-                    
-                    fmt = fmt' revOpts
-                        where fmt' [] = OutputDoc
-                              fmt' (Help:opts) = fmt' opts
-                              fmt' (StyleName _:opts) = fmt' opts
-                              fmt' (flag:opts) = flag
-
-                    styleFn = style' revOpts
-                        where style' [] = \fn -> fn Nothing
-                              style' (StyleName fp:opts) = \fn -> withFile fp ReadMode $ \h -> fn $ Just h
-                              style' (_:opts) = style' opts
-
-                    inFn = case nonOpts of
-                             [] -> \fn -> fn stdin
-                             _ -> withFile (last nonOpts) ReadMode
-
-                    eOut = case nonOpts of
-                             [] | fmt == OutputPdf -> error "cannot use stdin with PDF output format"
-                             _ | fmt == OutputPdf -> Right $ last nonOpts
-                             _ -> Left stdout

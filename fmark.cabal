@@ -24,6 +24,8 @@ data-files:
 
 executable fmark
   main-is:             Main.hs
+  extensions:	       DoAndIfThenElse
+  hs-source-dirs:      src
   -- other-modules:       
   build-depends:
         base == 4.5.*,
