@@ -1,5 +1,5 @@
 name:                fmark
-version:             0.1.0
+version:             0.1.1
 homepage:            http://github.com/jabolopes/fmark
 bug-reports:         http://github.com/jabolopes/fmark/issues
 synopsis:            A Friendly Markup language without syntax.
@@ -24,8 +24,18 @@ data-files:
 
 executable fmark
   main-is:             Main.hs
-  extensions:	       DoAndIfThenElse
+  extensions:          DoAndIfThenElse
   hs-source-dirs:      src
+  other-modules:
+        Backend.Latex
+        Backend.Xml
+        Data.Document
+        Data.Text
+        Data.Token
+        Fmark
+        Parser
+        Utils
+        Weaver
   -- other-modules:       
   build-depends:
         base == 4.5.*,
