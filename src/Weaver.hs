@@ -83,12 +83,8 @@ weave doc style =
                 ([cnt], [msgLines n1 n2 "content" cnt1 cnt2 sty1 sty2])
 
           weave' (Content docs1) (Content docs2) =
-              let errs | length docs1 < length docs2 = ["content: " ++ show docs1 ++ " does not match style " ++ show docs2]
-                       | otherwise = []
-                  (matDocs, unmatDocs) = splitAt (length docs2) docs1
-                  (docsSty', errss) = unzip [ weave' doc1 doc2 | doc1 <- matDocs | doc2 <- docs2 ]
-              in
-                ([Content (concat docsSty' ++ unmatDocs)], errs ++ concat errss)
+              let (docss, errss) = unzip [ weave' doc1 doc2 | doc1 <- docs1 | doc2 <- docs2 ]
+              in ([Content (concat docss)], concat errss)
 
           weave' (Section doc1) (Section doc2) =
               let (doc', errs) = weave' doc1 doc2 in
