@@ -157,9 +157,7 @@ updated
     $ cabal update
     $ cabal install fmark
 
-You can also download directly from HackageDB
-
-[Fmark on HackageDB](http://hackage.haskell.org/package/fmark)
+You can also checkout [Fmark on HackageDB](http://hackage.haskell.org/package/fmark).
 
 Installation from source
 ------------------------
