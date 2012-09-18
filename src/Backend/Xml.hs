@@ -118,6 +118,7 @@ docToXml _ doc =
                      xmlLongTag attrs tag $ concat <$> sequence ms
 
           loopText :: Text -> XmlM String
+          loopText (Emphasis str) = withPrefix False $ xmlShortTag [] "em" $ return str
           loopText (Footnote str) = withPrefix False $ xmlShortTag [] "footnote" $ return str
           loopText (Plain str) = xmlStr $ return str
 

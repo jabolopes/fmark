@@ -12,7 +12,7 @@ import Utils
 -- heading.
 isParagraph :: String -> Bool
 isParagraph str =
-    isPunctuation c && (not $ c `elem` "[]\"")
+    isPunctuation c && (not $ c `elem` "[]'\"")
     where c = last str
 
 
@@ -55,15 +55,19 @@ classify str =
 -- | 'reconstruct' @str@ produces the 'List' of 'Text' elements for
 -- 'String' @str@.
 reconstructLine :: String -> [Text]
-reconstructLine = loop
+reconstructLine str = loop str
     where loop [] = []
           loop ('[':str) =
               case span (/= ']') str of
                 (hd, []) -> [Plain hd]
                 (hd, _:tl) -> Footnote hd:loop tl
+          loop ('\'':str) =
+              case span (/= '\'') str of
+                (hd, []) -> [Plain hd]
+                (hd, _:tl) -> Emphasis hd:loop tl
           loop str =
               Plain hd:loop tl
-              where (hd, tl) = span (/= '[') str
+              where (hd, tl) = span (\c -> not $ elem c "['") str
 
 
 -- | 'reconstructLines' @str@ produces the 'List' of 'Text' elements

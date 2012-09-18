@@ -59,10 +59,13 @@ msgParagraph loc (_, styStr) = msgLine "paragraph" loc styStr
 -- 'Text' @txt2@ where @loc@ is the 'Srloc' of the produced 'Style'
 -- elements.  'Nothing' is returned if the style cannot be applied.
 weaveText :: Srcloc -> Text -> Text -> Maybe Document
+weaveText loc (Emphasis cnt) (Emphasis sty) =
+    Just $ Style loc (trim sty) $ Plain $ trim cnt
+
 weaveText loc (Footnote cnt) (Footnote sty) =
     Just $ Style loc (trim sty) $ Plain $ trim cnt
 
-weaveText loc text@(Plain cnt) (Plain sty) =
+weaveText loc (Plain cnt) (Plain sty) =
     Just $ Style loc (trim sty') $ Plain $ trim cnt
     where sty' | isParagraph sty = init sty
                | otherwise = sty

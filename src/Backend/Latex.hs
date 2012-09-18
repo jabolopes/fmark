@@ -66,6 +66,7 @@ docToLatex mstyle doc =
 
           seq = intercalate "\n" . filter (\ln -> trim ln /= "")
 
+          loopText (Emphasis str) = com "emph" str
           loopText (Footnote str) = com "footnote" str
           loopText (Plain str) = lit str
 
