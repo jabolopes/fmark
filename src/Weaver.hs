@@ -34,12 +34,12 @@ msgLines title (n1, cnt1) (n2, cnt2) (n1', sty1) (n2', sty2) =
                         prefix "  " sty]
 
 
-headingMsg :: Srcloc -> Srcloc -> String
-headingMsg loc (_, styStr) = msgLine "heading" loc styStr
+msgHeading :: Srcloc -> Srcloc -> String
+msgHeading loc (_, styStr) = msgLine "heading" loc styStr
 
 
-paragraphMsg :: Srcloc -> Srcloc -> String
-paragraphMsg loc (_, styStr) = msgLine "paragraph" loc styStr
+msgParagraph :: Srcloc -> Srcloc -> String
+msgParagraph loc (_, styStr) = msgLine "paragraph" loc styStr
 
 
 weaveText :: Srcloc -> Text -> Text -> Maybe Document
@@ -71,12 +71,12 @@ weave doc style =
     let (docs, errs) = weave' doc style in (ensureDocument docs, errs)
     where weave' cnt@(Heading loc1 lns1) (Heading loc2 lns2) =
               case weaveLines loc1 lns1 lns2 of
-                Nothing -> ([cnt], [headingMsg loc1 loc2])
+                Nothing -> ([cnt], [msgHeading loc1 loc2])
                 Just docs -> (concat docs, [])
 
           weave' cnt@(Paragraph loc1 txts1) (Paragraph loc2 txts2) =
               case weaveLine loc1 txts1 txts2 of
-                Nothing -> ([cnt], [paragraphMsg loc1 loc2])
+                Nothing -> ([cnt], [msgParagraph loc1 loc2])
                 Just docs -> (docs, [])
 
           weave' cnt@(Content docs1) sty@(Content docs2) | length docs1 < length docs2 =
