@@ -23,7 +23,7 @@ data Document
     -- | 'Section' is a 'Document' part that represents a subsection.
     | Section Document
 
-    | Style String Text
+    | Style Srcloc String Text
 
 instance Show Document where
     show (Heading _ docs) = "Heading = " ++ show docs
@@ -31,9 +31,17 @@ instance Show Document where
     show (Content docs) = intercalate "\n" $ map show docs
     show (Section doc) = "begin\n" ++ show doc ++ "\nend"
 
-    show (Style sty str) = "(" ++ sty ++ ") = " ++ show str
+    show (Style _ sty str) = "(" ++ sty ++ ") = " ++ show str
 
 
 ensureDocument :: [Document] -> Document
 ensureDocument [doc] = doc
 ensureDocument docs = Content docs
+
+
+rangeloc :: Document -> (Srcloc, Srcloc)
+rangeloc (Heading loc _) = (loc, loc)
+rangeloc (Paragraph loc _) = (loc, loc)
+rangeloc (Content (doc:docs)) = (fst $ rangeloc doc, snd $ rangeloc $ last docs)
+rangeloc (Section doc) = rangeloc doc
+rangeloc (Style loc _ _) = (loc, loc)

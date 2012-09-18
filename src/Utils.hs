@@ -49,15 +49,6 @@ prefix pre str =
                                  _ -> [c])
 
 
-prefixArrow :: Int -> String -> String -> String
-prefixArrow i pre str =
-    unlines [ if i == j then
-                  '>':tail pre ++ ln
-              else
-                  pre ++ ln | ln <- lines str
-                            | j <- [1..] ]
-
-
 -- | 'push' @x xs@ adds @x@ to @xs@ only if the first element in @xs@
 -- is different from @x@.
 --

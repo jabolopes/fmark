@@ -87,7 +87,7 @@ fmark fmt contents Nothing =
 fmark fmt contents (Just style) =
     let doc = docify $ classify contents in
     let styleDoc = docify $ classify style in
-    let (doc', errs) = weaveStyle doc styleDoc in
+    let (doc', errs) = weave doc styleDoc in
     (formatFn fmt (Just styleDoc) doc', errs)
 
 
