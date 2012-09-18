@@ -1,4 +1,3 @@
-{-# LANGUAGE ParallelListComp #-}
 -- | 'Weaver' combines content and style to produced styled
 -- 'Document's.
 module Weaver where

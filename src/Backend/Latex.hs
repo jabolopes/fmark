@@ -69,8 +69,8 @@ docToLatex mstyle doc =
           loopText (Footnote str) = com "footnote" str
           loopText (Plain str) = lit str
 
-          loop lvl (Heading _ lns) = sec lvl $ intercalate "\n" $ [ concat $ map loopText txts | txts <- lns ]
-          loop lvl (Paragraph _ txts) = concat $ map loopText txts
+          loop lvl (Heading _ lns) = sec lvl $ intercalate "\n" [ concatMap loopText txts | txts <- lns ]
+          loop lvl (Paragraph _ txts) = concatMap loopText txts
           loop lvl (Content docs) = seq $ map (loop lvl) docs
           loop lvl (Section doc) = loop (lvl + 1) doc
-          loop lvl (Style _ _ _) = ""
+          loop lvl Style {} = ""
