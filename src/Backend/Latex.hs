@@ -1,71 +1,76 @@
 module Backend.Latex where
 
+import Data.Functor ((<$>))
+import Data.List (intercalate)
+
+import Utils (trim)
+import Data.Document
+import Data.Text
+
+
 -- | 'docToLatex' @mstyle doc@ formats a styled 'Document' @doc@ into
 -- a LaTeX 'String', where @mstyle@ specifies the style 'Document'
 -- used to stylize @doc@.
--- docToLatex :: Maybe Document -> Document -> String
--- docToLatex mstyle doc =
---     let ps = properties doc 
---         title = lookup "Title" ps
---         subtitle = lookup "Subtitle" ps
---         author = lookup "Author" ps
---         date = lookup "Date" ps
---         abstract = lookup "Abstract" ps
---         maketitle = case (title, author, date) of
---                       (Just _, Just _, Just _) -> def "maketitle"
---                       _ -> ""
---     in
---       seq [comArgs "documentclass" ["a4paper"] "article",
---            comArgs "usepackage" ["utf8"] "inputenc",
---            fulltitle title subtitle,
---            prop (com "author") author,
---            prop (com "date") date,
---            env "document" $ seq [maketitle,
---                                  prop (env "abstract") abstract,
---                                  loop 0 doc]]
---     where fulltitle Nothing Nothing = ""
---           fulltitle (Just t) Nothing = com "title" t
---           fulltitle Nothing (Just s) = com "title" $ com "large" s
---           fulltitle (Just t) (Just s) = com "title" $ nls $ t ++ "\n" ++ com "large" s
-          
---           properties (Heading _ docs) = concatMap properties docs
---           properties (Paragraph _ docs) = concatMap properties docs
---           properties (Content docs) = concatMap properties docs
---           properties (Section doc) = properties doc
+docToLatex :: Maybe Document -> Document -> String
+docToLatex mstyle doc =
+    let ps = properties doc 
+        title = lookup "Title" ps
+        subtitle = lookup "Subtitle" ps
+        author = lookup "Author" ps
+        date = lookup "Date" ps
+        abstract = lookup "Abstract" ps
+        maketitle = case (title, author, date) of
+                      (Just _, Just _, Just _) -> def "maketitle"
+                      _ -> ""
+    in
+      seq [comArgs "documentclass" ["a4paper"] "article",
+           comArgs "usepackage" ["utf8"] "inputenc",
+           fulltitle title subtitle,
+           prop (com "author") author,
+           prop (com "date") date,
+           env "document" $ seq [maketitle,
+                                 prop (env "abstract") abstract,
+                                 loop 0 doc]]
+    where fulltitle Nothing Nothing = ""
+          fulltitle (Just t) Nothing = com "title" t
+          fulltitle Nothing (Just s) = com "title" $ com "large" s
+          fulltitle (Just t) (Just s) = com "title" $ nls $ t ++ "\n" ++ com "large" s
 
---           properties (Footnote _) = []
---           properties (Plain _) = []
---           properties (Style str doc) = [(str, loop 0 doc)]
+          properties (Heading _ _) = []
+          properties (Paragraph _ _) = []
+          properties (Content docs) = concatMap properties docs
+          properties (Section doc) = properties doc
+          properties (Style _ sty str) = [(sty, loopText str)]
 
---           lit = concatMap lit'
---               where lit' '#' = "\\#"
---                     lit' c = [c]
+          lit = concatMap lit'
+              where lit' '#' = "\\#"
+                    lit' c = [c]
 
---           nls = concatMap nls'
---               where nls' '\n' = "\\\\"
---                     nls' c = [c]
+          nls = concatMap nls'
+              where nls' '\n' = "\\\\"
+                    nls' c = [c]
 
---           def id = '\\':lit id
---           com id str = "\\" ++ lit id ++ "{" ++ lit str ++ "}"
---           comArgs id args str = "\\" ++ lit id ++ "[" ++ intercalate "," (map lit args) ++ "]{" ++ lit str ++ "}"
---           env id str = "\\begin{" ++ lit id ++ "}\n" ++ lit str ++ "\n\\end{" ++ lit id ++ "}"
+          def id = '\\':lit id
+          com id str = "\\" ++ lit id ++ "{" ++ lit str ++ "}"
+          comArgs id args str = "\\" ++ lit id ++ "[" ++ intercalate "," (map lit args) ++ "]{" ++ lit str ++ "}"
+          env id str = "\\begin{" ++ lit id ++ "}\n" ++ lit str ++ "\n\\end{" ++ lit id ++ "}"
 
---           prop fn = maybe "" $ fn . lit
+          prop fn = maybe "" $ fn . lit
 
---           sec lvl str
---               | lvl < 3 = com (concat (replicate lvl "sub") ++ "section") $ nls str
---               | lvl == 3 = com "paragraph" $ nls str
---               | lvl == 4 = com "subparagraph" $ nls str
+          sec lvl str
+              | lvl < 3 = com (concat (replicate lvl "sub") ++ "section") $ nls str
+              | lvl == 3 = com "paragraph" $ nls str
+              | lvl == 4 = com "subparagraph" $ nls str
 
---           par = lit
+          par = lit
 
---           seq = intercalate "\n" . filter (\ln -> trim ln /= "")
+          seq = intercalate "\n" . filter (\ln -> trim ln /= "")
 
---           loop lvl (Heading _ _ docs) = sec lvl $ intercalate "\n" $ map (loop lvl) docs
---           loop lvl (Paragraph _ _ docs) = concat $ map (loop lvl) docs
---           loop lvl (Content docs) = seq $ map (loop lvl) docs
---           loop lvl (Section doc) = loop (lvl + 1) doc
+          loopText (Footnote str) = com "footnote" str
+          loopText (Plain str) = lit str
 
---           loop lvl (Footnote str) = com "footnote" str
---           loop lvl (Plain str) = lit str
---           loop lvl (Style _ _) = ""
+          loop lvl (Heading _ lns) = sec lvl $ intercalate "\n" $ [ concat $ map loopText txts | txts <- lns ]
+          loop lvl (Paragraph _ txts) = concat $ map loopText txts
+          loop lvl (Content docs) = seq $ map (loop lvl) docs
+          loop lvl (Section doc) = loop (lvl + 1) doc
+          loop lvl (Style _ _ _) = ""

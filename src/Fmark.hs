@@ -61,7 +61,7 @@ data Flag
 -- appropriate formatter function.
 formatFn :: Flag -> Maybe Document -> Document -> String
 formatFn OutputDoc = const show
--- formatFn OutputLatex = docToLatex
+formatFn OutputLatex = docToLatex
 formatFn OutputPdf = formatFn OutputLatex
 formatFn OutputXml = docToXml
 formatFn fmt = error $ "unhandled case: " ++ show fmt
