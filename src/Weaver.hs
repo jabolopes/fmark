@@ -10,32 +10,36 @@ import Parser
 import Utils
 
 
-msgLine :: Int -> String -> String -> String -> String
-msgLine n title cnt sty =
+msgLine :: String -> Srcloc -> String -> String
+msgLine title (n, cnt) sty =
     intercalate "\n" ["In line " ++ show n ++ ", " ++ title,
                       prefix "  " cnt,
                       "does not match style",
                       prefix "  " sty]
 
 
-msgLines :: Int -> Int -> String -> String -> String -> String -> String -> String
-msgLines n1 n2 title cnt1 cnt2 sty1 sty2 =
-    intercalate "\n" ["Between lines " ++ show n1 ++ " and " ++ show n2 ++ ", " ++ title,
-                      prefix "  " cnt1,
-                      "  ...",
-                      prefix "  " cnt2,
-                      "does not match style",
-                      prefix "  " sty1,
-                      "  ...",
-                      prefix "  " sty2]
+msgLines :: String -> Srcloc -> Srcloc -> Srcloc -> Srcloc -> String
+msgLines title (n1, cnt1) (n2, cnt2) (n1', sty1) (n2', sty2) =
+    let
+        pre | n1 == n2 = "In line " ++ show n1
+            | otherwise = "In lines " ++ show n1 ++ "-" ++ show n2
+        cnt | n1 == n2 = cnt1
+            | otherwise = intercalate "\n" [cnt1, "...", cnt2]
+        sty | n1' == n2' = sty1
+            | otherwise = intercalate "\n" [sty1, "...", sty2]
+    in
+      intercalate "\n" [pre ++ ", " ++ title,
+                        prefix "  " cnt,
+                        "does not match style",
+                        prefix "  " sty]
 
 
 headingMsg :: Srcloc -> Srcloc -> String
-headingMsg (n, cntStr) (_, styStr) = msgLine n "heading" cntStr styStr
+headingMsg loc (_, styStr) = msgLine "heading" loc styStr
 
 
 paragraphMsg :: Srcloc -> Srcloc -> String
-paragraphMsg (n, cntStr) (_, styStr) = msgLine n "paragraph" cntStr styStr
+paragraphMsg loc (_, styStr) = msgLine "paragraph" loc styStr
 
 
 weaveText :: Srcloc -> Text -> Text -> Maybe Document
@@ -77,10 +81,10 @@ weave doc style =
 
           weave' cnt@(Content docs1) sty@(Content docs2) | length docs1 < length docs2 =
               let
-                  ((n1, cnt1), (n2, cnt2)) = rangeloc cnt
-                  ((_, sty1), (_, sty2)) = rangeloc sty
+                  (cntLoc1, cntLoc2) = rangeloc cnt
+                  (styLoc1, styLoc2) = rangeloc sty
               in
-                ([cnt], [msgLines n1 n2 "content" cnt1 cnt2 sty1 sty2])
+                ([cnt], [msgLines "content" cntLoc1 cntLoc2 styLoc1 styLoc2])
 
           weave' (Content docs1) (Content docs2) =
               let (docss, errss) = unzip [ weave' doc1 doc2 | doc1 <- docs1 | doc2 <- docs2 ]
@@ -90,4 +94,9 @@ weave doc style =
               let (doc', errs) = weave' doc1 doc2 in
               ([Section $ ensureDocument doc'], errs)
 
-          weave' doc _ = ([doc], [show doc])
+          weave' cnt sty =
+              let
+                  (cntLoc1, cntLoc2) = rangeloc cnt
+                  (styLoc1, styLoc2) = rangeloc sty
+              in
+                ([cnt], [msgLines "document" cntLoc1 cntLoc2 styLoc1 styLoc2])
