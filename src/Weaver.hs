@@ -110,8 +110,10 @@ weave doc style =
                 ([cnt], [msgLines "content" cntLoc1 cntLoc2 styLoc1 styLoc2])
 
           weave' (Content docs1) (Content docs2) =
-              let (docss, errss) = unzip [ weave' doc1 doc2 | doc1 <- docs1 | doc2 <- docs2 ]
-              in ([Content (concat docss)], concat errss)
+              let
+                  (matDocs, unmatDocs) = splitAt (length docs2) docs1
+                  (docss, errss) = unzip $ zipWith weave' matDocs docs2
+              in ([Content (concat docss ++ unmatDocs)], concat errss)
 
           weave' (Section doc1) (Section doc2) =
               let (doc', errs) = weave' doc1 doc2 in
