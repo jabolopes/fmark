@@ -1,4 +1,5 @@
 {-# LANGUAGE ParallelListComp #-}
+-- | 'Utils' is a module of assorted utilities.
 module Utils where
 
 import Data.Char (isSpace)
@@ -7,6 +8,8 @@ import Data.List (dropWhileEnd)
 
 -- | 'filterLines' @lns@ filters empty lines and lines containing only
 -- space characters from @lns@.
+--
+-- > filterLines ["hello", " \t ", "goodbye"] == ["hello","goodbye"]
 filterLines :: [String] -> [String]
 filterLines lns = [ ln | ln <- lns, trim ln /= "" ]
 

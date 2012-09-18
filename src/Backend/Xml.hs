@@ -1,3 +1,4 @@
+-- | 'Backend.Xml' is the XML generator backend for 'Document's.
 module Backend.Xml where
 
 import Control.Monad.State (State, evalState, get, modify)
@@ -8,7 +9,9 @@ import Data.Document
 import Data.Text
 
 
--- | 'XmlState' is the XML generator state.
+-- | 'XmlState' is the XML generator state that records the current
+-- indentation level and a prefix values that decides whether XML tags
+-- should be indented.
 data XmlState = XmlState Int Bool
 
 -- | 'XmlM' is the type of the XML generator 'Monad'.
@@ -21,6 +24,9 @@ getIdn =
     do XmlState idn _ <- get
        return idn
 
+
+-- | 'putIdn' @idn@ is a 'Monad' that modifies the current indentation
+-- level.
 putIdn :: Int -> XmlM ()
 putIdn idn =
     modify $ \(XmlState _ pre) -> XmlState idn pre
@@ -37,17 +43,21 @@ withIdn m =
        return val
 
 
+-- | 'getPrefix' is a 'Monad' with the current prefix.
 getPrefix :: XmlM Bool
 getPrefix =
     do XmlState _ pre <- get
        return pre
 
 
+-- | 'putPrefix' @pre@ is a 'Monad' that modified the current prefix.
 putPrefix :: Bool -> XmlM ()
 putPrefix pre =
     modify $ \(XmlState idn _) -> XmlState idn pre
 
 
+-- | 'withPrefix' @pre m@ is a 'Monad' that modified the current
+-- prefix for 'Monad' @m@.
 withPrefix :: Bool -> XmlM a -> XmlM a
 withPrefix pre m =
     do pre' <- getPrefix

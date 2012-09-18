@@ -1,4 +1,6 @@
 {-# LANGUAGE ParallelListComp #-}
+-- | 'Weaver' combines content and style to produced styled
+-- 'Document's.
 module Weaver where
 
 import Control.Monad (zipWithM)
@@ -10,6 +12,8 @@ import Parser
 import Utils
 
 
+-- | 'msgLine' @title cntLoc styLoc@ produces a warning message for a
+-- given content and style 'Srcloc'.
 msgLine :: String -> Srcloc -> String -> String
 msgLine title (n, cnt) sty =
     intercalate "\n" ["In line " ++ show n ++ ", " ++ title,
@@ -18,6 +22,10 @@ msgLine title (n, cnt) sty =
                       prefix "  " sty]
 
 
+-- | 'msgLines' @title cntLoc1 cntLoc2 styLoc1 styLoc2@ produces a
+-- warning message that spans multiple lines of content and style.
+-- This warning message is adjusted to possibly equal ranges of
+-- content and style lines.
 msgLines :: String -> Srcloc -> Srcloc -> Srcloc -> Srcloc -> String
 msgLines title (n1, cnt1) (n2, cnt2) (n1', sty1) (n2', sty2) =
     let
@@ -34,14 +42,23 @@ msgLines title (n1, cnt1) (n2, cnt2) (n1', sty1) (n2', sty2) =
                         prefix "  " sty]
 
 
+-- | 'msgHeading' @cntLoc styLoc@ produces a suitable warning message
+-- for a 'Heading' element given the 'Srcloc' of the content and the
+-- 'Srcloc' of the style.
 msgHeading :: Srcloc -> Srcloc -> String
 msgHeading loc (_, styStr) = msgLine "heading" loc styStr
 
 
+-- | 'msgPararaph' @cntLoc styLoc@ produces a suitable warning message
+-- for a 'Paragraph' element given the 'Srcloc' of the content and the
+-- 'Srcloc' of the style.
 msgParagraph :: Srcloc -> Srcloc -> String
 msgParagraph loc (_, styStr) = msgLine "paragraph" loc styStr
 
 
+-- | 'weaveText' @loc txt1 txt2@ weaves 'Text' @txt1@ with style of
+-- 'Text' @txt2@ where @loc@ is the 'Srloc' of the produced 'Style'
+-- elements.  'Nothing' is returned if the style cannot be applied.
 weaveText :: Srcloc -> Text -> Text -> Maybe Document
 weaveText loc (Footnote cnt) (Footnote sty) =
     Just $ Style loc (trim sty) $ Plain $ trim cnt
@@ -54,18 +71,24 @@ weaveText loc text@(Plain cnt) (Plain sty) =
 weaveText _ _ _ = Nothing
 
 
+-- | 'weaveLine' @loc txts1 txts2@ weaves 'Text's @txts1@ with style
+-- of @txts2@ where @loc@ is the 'Srcloc' of the produced 'Style'
+-- elements.  'Nothing' is returned if the style cannot be applied.
 weaveLine :: Srcloc -> [Text] -> [Text] -> Maybe [Document]
 weaveLine _ txts1 txts2 | length txts1 /= length txts2 = Nothing
 weaveLine loc txts1 txts2 = zipWithM (weaveText loc) txts1 txts2
 
 
+-- | 'weaveLines' @loc lns1 lns2@ weaves lines @lns1@ with style of
+-- lines @lns2@ where @loc@ is the 'Srcloc' of the produced 'Style'
+-- elements.  'Nothing' is returned if the style cannot be applied.
 weaveLines :: Srcloc -> [[Text]] -> [[Text]] -> Maybe [[Document]]
 weaveLines _ lns1 lns2 | length lns1 /= length lns2 = Nothing
 weaveLines loc lns1 lns2 = zipWithM (weaveLine loc) lns1 lns2
 
 
 -- | 'weaveStyle' @doc style@ combines content 'Document' @doc@ and
--- style 'Document' @style@ in a single 'Document'.
+-- style 'Document' @style@ in a single styled 'Document'.
 weave :: Document -> Document -> (Document, [String])
 weave doc style =
     let (docs, errs) = weave' doc style in (ensureDocument docs, errs)

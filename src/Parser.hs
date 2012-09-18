@@ -8,9 +8,11 @@ import Data.Token
 import Utils
 
 
+-- | 'isParagraph' @str@ decides whether @str@ is a paragraph or a
+-- heading.
 isParagraph :: String -> Bool
 isParagraph str =
-    isPunctuation c && c /= '[' && c /= ']'
+    isPunctuation c && (not $ c `elem` "[]\"")
     where c = last str
 
 
@@ -50,8 +52,10 @@ classify str =
                         idn2 = indentation ln2
 
 
-reconstruct :: String -> [Text]
-reconstruct = loop
+-- | 'reconstruct' @str@ produces the 'List' of 'Text' elements for
+-- 'String' @str@.
+reconstructLine :: String -> [Text]
+reconstructLine = loop
     where loop [] = []
           loop ('[':str) =
               case span (/= ']') str of
@@ -62,8 +66,10 @@ reconstruct = loop
               where (hd, tl) = span (/= '[') str
 
 
-reconstructHeading :: String -> [[Text]]
-reconstructHeading = map reconstruct . lines
+-- | 'reconstructLines' @str@ produces the 'List' of 'Text' elements
+-- for each line in @str@.
+reconstructLines :: String -> [[Text]]
+reconstructLines = map reconstructLine . lines
 
 
 -- | 'docify' @tks@ parses the sequence of 'Token's @tks@ into a 'Document'.
@@ -78,8 +84,8 @@ docify tks =
 
           docify' (Literal n str:tks) (top:st) =
               docify' tks ((doc:top):st)
-              where doc | isParagraph str = Paragraph (n, str) $ reconstruct $ replace ' ' str
-                        | otherwise = Heading (n, str) $ reconstructHeading str
+              where doc | isParagraph str = Paragraph (n, str) $ reconstructLine $ replace ' ' str
+                        | otherwise = Heading (n, str) $ reconstructLines str
 
           docify' (BeginSection:tks) st =
               docify' tks ([]:st)
