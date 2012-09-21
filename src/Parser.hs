@@ -12,7 +12,7 @@ import Utils
 -- heading.
 isParagraph :: String -> Bool
 isParagraph str =
-    isPunctuation c && (not $ c `elem` "[]'\"")
+    isPunctuation c && (not $ c `elem` "()[]'\"")
     where c = last str
 
 
