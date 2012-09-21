@@ -78,12 +78,9 @@ docToXml _ doc =
           xmlIndent :: XmlM String -> XmlM String
           xmlIndent m =
               do idn <- getIdn
-                 pre <- getPrefix
-                 if pre then
-                     do str <- m
-                        return $ replicate idn ' ' ++ str
-                 else
-                     m
+                 getPrefix >>= pre idn
+              where pre idn True = m >>= return . (++) (replicate idn ' ')
+                    pre _ False = m
 
           xmlAttribute Nothing = []
           xmlAttribute (Just val) = [("style", val)]
@@ -100,22 +97,18 @@ docToXml _ doc =
                                    return ("</" ++ tag ++ ">")]
 
           xmlLongTag attrs tag m =
-              do pre <- getPrefix
-                 if pre then
-                     concat <$> sequence [xmlIndent (return ("<" ++ tag ++ xmlAttributes attrs ++ ">\n")),
-                                          withIdn m,
-                                          return "\n",
-                                          xmlIndent (return ("</" ++ tag ++ ">"))]
-                 else
-                     xmlShortTag attrs tag m
+              getPrefix >>= pre
+              where pre True = concat <$> sequence [xmlIndent (return ("<" ++ tag ++ xmlAttributes attrs ++ ">\n")),
+                                                    withIdn m,
+                                                    return "\n",
+                                                    xmlIndent (return ("</" ++ tag ++ ">"))]
+                    pre False = xmlShortTag attrs tag m
 
           xmlLongTags :: [(String, String)] -> String -> [XmlM String] -> XmlM String
           xmlLongTags attrs tag ms =
-              do pre <- getPrefix
-                 if pre then
-                     xmlLongTag attrs tag $ intercalate "\n" <$> sequence ms
-                 else
-                     xmlLongTag attrs tag $ concat <$> sequence ms
+              getPrefix >>= pre
+              where pre True = xmlLongTag attrs tag $ intercalate "\n" <$> sequence ms
+                    pre False = xmlLongTag attrs tag $ concat <$> sequence ms
 
           loopText :: Text -> XmlM String
           loopText (Emphasis str) = withPrefix False $ xmlShortTag [] "em" $ return str

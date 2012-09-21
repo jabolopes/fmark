@@ -3,7 +3,25 @@
 module Utils where
 
 import Data.Char (isSpace)
-import Data.List (dropWhileEnd)
+
+-- EDIT: for new GHC
+--import Data.List (dropWhileEnd)
+
+
+-- EDIT: for old GHC
+
+-- | The 'dropWhileEnd' function drops the largest suffix of a list
+-- in which the given predicate holds for all elements.  For example:
+--
+-- > dropWhileEnd isSpace "foo\n" == "foo"
+-- > dropWhileEnd isSpace "foo bar" == "foo bar"
+-- > dropWhileEnd isSpace ("foo\n" ++ undefined) == "foo" ++ undefined
+
+dropWhileEnd :: (a -> Bool) -> [a] -> [a]
+dropWhileEnd p = foldr (\x xs -> if p x && null xs then [] else x : xs) []
+
+-- /
+
 
 
 -- | 'filterLines' @lns@ filters empty lines and lines containing only

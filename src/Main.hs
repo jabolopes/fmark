@@ -1,13 +1,38 @@
 module Main where
 
-import Data.List (intercalate, dropWhileEnd)
+import Data.List (intercalate)
 
 import System.Console.GetOpt
 import System.Environment (getArgs, getProgName)
 import System.IO
 
-
 import Fmark
+import Utils
+
+
+-- | 'Flag' represents the command line flags that specify output
+-- format, display usage information, and 'Style' filename.
+data Flag
+    -- | Output to 'stdout' in 'Document' format.
+    = OutputDoc
+    -- | Output to 'stdout' in LaTeX format.
+    | OutputLatex
+    -- | Output to a PDF file using LaTeX format and 'pdflatex'.
+    | OutputPdf
+    -- | Output to 'stdout' in XML format.
+    | OutputXml
+    -- | Display usage information.
+    | Help
+    -- | Specify the filename of the style file.
+    | StyleName String
+      deriving (Eq)
+
+
+formatOfFlag :: Flag -> Format
+formatOfFlag OutputDoc = FormatDoc
+formatOfFlag OutputLatex = FormatLatex
+formatOfFlag OutputPdf = FormatPdf
+formatOfFlag OutputXml = FormatXml
 
 
 -- | 'options' represents the command line options.
@@ -41,10 +66,10 @@ main =
               where revOpts = reverse opts
                     
                     fmt = fmt' revOpts
-                        where fmt' [] = OutputDoc
+                        where fmt' [] = FormatDoc
                               fmt' (Help:opts) = fmt' opts
                               fmt' (StyleName _:opts) = fmt' opts
-                              fmt' (flag:opts) = flag
+                              fmt' (flag:opts) = formatOfFlag flag
 
                     styleFn = style' revOpts
                         where style' [] = \fn -> fn Nothing
@@ -53,9 +78,10 @@ main =
 
                     inFn = case nonOpts of
                              [] -> \fn -> fn stdin
-                             _ -> withFile (last nonOpts) ReadMode
+                             [_] -> withFile (last nonOpts) ReadMode
+                             _ -> error "only one Fmark file can be specified"
 
                     eOut = case nonOpts of
-                             [] | fmt == OutputPdf -> error "cannot use stdin with PDF output format"
-                             _ | fmt == OutputPdf -> Right $ last nonOpts
+                             [] | fmt == FormatPdf -> error "cannot use stdin with PDF output format"
+                             _ | fmt == FormatPdf -> Right $ last nonOpts
                              _ -> Left stdout
