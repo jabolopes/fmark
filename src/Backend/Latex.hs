@@ -50,7 +50,6 @@ seq = intercalate "\n" . filter (\ln -> trim ln /= "")
 
 
 loopText :: Text -> String
-loopText (Emphasis str) = com "emph" str
 loopText (Footnote str) = com "footnote" str
 loopText (Plain str) = lit str
 

@@ -60,9 +60,6 @@ msgParagraph loc (_, styStr) = msgLine "paragraph" loc styStr
 -- 'Text' @txt2@ where @loc@ is the 'Srloc' of the produced 'Style'
 -- elements.  'Nothing' is returned if the style cannot be applied.
 weaveText :: Srcloc -> Text -> Text -> Maybe Document
-weaveText loc (Emphasis cnt) (Emphasis sty) =
-    Just $ Style loc (trim sty) [[Plain $ trim cnt]]
-
 weaveText loc (Footnote cnt) (Footnote sty) =
     Just $ Style loc (trim sty) [[Plain $ trim cnt]]
 
@@ -75,7 +72,7 @@ weaveText _ _ _ = Nothing
 
 
 weaveExtraLine :: Srcloc -> [Text] -> Text -> Maybe Document
-weaveExtraLine loc txts (Emphasis sty) = Just $ Style loc (trim sty) [txts]
+-- weaveExtraLine loc txts (Emphasis sty) = Just $ Style loc (trim sty) [txts]
 weaveExtraLine loc txts (Footnote sty) = Just $ Style loc (trim sty) [txts]
 weaveExtraLine loc txts (Plain sty) = Just $ Style loc (trim sty) [txts]
 
@@ -94,7 +91,7 @@ weaveLine loc txts1 txts2 =
 
 
 weaveExtraLines :: Srcloc -> [[Text]] -> [Text] -> Maybe Document
-weaveExtraLines loc lns [Emphasis sty] = Just $ Style loc (trim sty) lns
+-- weaveExtraLines loc lns [Emphasis sty] = Just $ Style loc (trim sty) lns
 weaveExtraLines loc lns [Footnote sty] = Just $ Style loc (trim sty) lns
 weaveExtraLines loc lns [Plain sty] = Just $ Style loc (trim sty) lns
 weaveExtraLines _ _ _ = Nothing

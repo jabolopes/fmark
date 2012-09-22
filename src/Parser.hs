@@ -7,12 +7,15 @@ import Data.Text
 import Data.Token
 import Utils
 
+import Debug.Trace
+
 
 -- | 'isParagraph' @str@ decides whether @str@ is a paragraph or a
 -- heading.
 isParagraph :: String -> Bool
 isParagraph str =
-    isPunctuation c && (not $ c `elem` "()[]'\"")
+    -- isPunctuation c && (not $ c `elem` "()[]'\"")
+    c `elem` ".!?"
     where c = last str
 
 
@@ -55,19 +58,30 @@ classify str =
 -- | 'reconstruct' @str@ produces the 'List' of 'Text' elements for
 -- 'String' @str@.
 reconstructLine :: String -> [Text]
-reconstructLine str = loop str
-    where loop [] = []
-          loop ('[':str) =
-              case span (/= ']') str of
+reconstructLine str = reconstruct str
+    where block sty = "[" ++ sty ++ " "
+          
+          isSpan sty str = take (length (block sty)) str == (block sty)
+
+          mkText c fn =
+              case span (/= c) str of
                 (hd, []) -> [Plain hd]
-                (hd, _:tl) -> Footnote hd:loop tl
-          loop ('\'':str) =
-              case span (/= '\'') str of
+                (hd, _:tl) -> fn hd:reconstruct tl
+
+          mkSpan sty str =
+              case span (/= ']') (drop (length (block sty)) str) of
                 (hd, []) -> [Plain hd]
-                (hd, _:tl) -> Emphasis hd:loop tl
-          loop str =
-              Plain hd:loop tl
-              where (hd, tl) = span (\c -> not $ elem c "['") str
+                (hd, _:tl) -> Span sty (reconstructLine hd):reconstruct tl
+
+          reconstruct "" = []
+          reconstruct str | isSpan "bold" str = mkSpan "bold" str
+                          | isSpan "italic" str = mkSpan "italic" str
+                          | isSpan "underline" str = mkSpan "underline" str
+          reconstruct ('[':str) = mkText ']' Footnote
+          --reconstruct ('\'':str) = mkText '\'' Emphasis
+          reconstruct str =
+              Plain hd:reconstruct tl
+              where (hd, tl) = span (\c -> not $ elem c "[") str
 
 
 -- | 'reconstructLines' @str@ produces the 'List' of 'Text' elements
