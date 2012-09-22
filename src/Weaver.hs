@@ -60,21 +60,22 @@ msgParagraph loc (_, styStr) = msgLine "paragraph" loc styStr
 -- 'Text' @txt2@ where @loc@ is the 'Srloc' of the produced 'Style'
 -- elements.  'Nothing' is returned if the style cannot be applied.
 weaveText :: Srcloc -> Text -> Text -> Maybe Document
-weaveText loc (Footnote cnt) (Footnote sty) =
+weaveText loc (Ref cnt) (Ref sty) =
     Just $ Style loc (trim sty) [[Plain $ trim cnt]]
 
 weaveText loc (Plain cnt) (Plain sty) =
     Just $ Style loc (trim sty') [[Plain $ trim cnt]]
     where sty' | isParagraph sty = init sty
                | otherwise = sty
-
+                             
+weaveText loc (Span _ _) (Span _ _) = error "weaveText: not implemented for Span Span"
 weaveText _ _ _ = Nothing
 
 
 weaveExtraLine :: Srcloc -> [Text] -> Text -> Maybe Document
--- weaveExtraLine loc txts (Emphasis sty) = Just $ Style loc (trim sty) [txts]
-weaveExtraLine loc txts (Footnote sty) = Just $ Style loc (trim sty) [txts]
 weaveExtraLine loc txts (Plain sty) = Just $ Style loc (trim sty) [txts]
+weaveExtraLine loc txts (Ref sty) = Just $ Style loc (trim sty) [txts]
+weaveExtraLine loc txts (Span _ _) = error "weaveExtraLine: not implemented for Span Span"
 
 
 -- | 'weaveLine' @loc txts1 txts2@ weaves 'Text's @txts1@ with style
@@ -91,9 +92,9 @@ weaveLine loc txts1 txts2 =
 
 
 weaveExtraLines :: Srcloc -> [[Text]] -> [Text] -> Maybe Document
--- weaveExtraLines loc lns [Emphasis sty] = Just $ Style loc (trim sty) lns
-weaveExtraLines loc lns [Footnote sty] = Just $ Style loc (trim sty) lns
 weaveExtraLines loc lns [Plain sty] = Just $ Style loc (trim sty) lns
+weaveExtraLines loc lns [Ref sty] = Just $ Style loc (trim sty) lns
+weaveExtraLines loc lns [Span _ _] = error "weaveExtraLines: not implemented for Span"
 weaveExtraLines _ _ _ = Nothing
 
 

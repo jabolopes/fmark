@@ -60,13 +60,13 @@ classify str =
 reconstructLine :: String -> [Text]
 reconstructLine str = reconstruct str
     where block sty = "[" ++ sty ++ " "
-          
-          isSpan sty str = take (length (block sty)) str == (block sty)
 
-          mkText c fn =
+          mkText c fn str =
               case span (/= c) str of
                 (hd, []) -> [Plain hd]
                 (hd, _:tl) -> fn hd:reconstruct tl
+          
+          isSpan sty str = take (length (block sty)) str == (block sty)
 
           mkSpan sty str =
               case span (/= ']') (drop (length (block sty)) str) of
@@ -77,8 +77,9 @@ reconstructLine str = reconstruct str
           reconstruct str | isSpan "bold" str = mkSpan "bold" str
                           | isSpan "italic" str = mkSpan "italic" str
                           | isSpan "underline" str = mkSpan "underline" str
-          reconstruct ('[':str) = mkText ']' Footnote
-          --reconstruct ('\'':str) = mkText '\'' Emphasis
+                          | isSpan "footnote" str = mkSpan "footnote" str
+                          | isSpan "cite" str = mkSpan "cite" str
+          reconstruct ('[':str) = mkText ']' Ref str
           reconstruct str =
               Plain hd:reconstruct tl
               where (hd, tl) = span (\c -> not $ elem c "[") str

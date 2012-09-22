@@ -67,6 +67,47 @@ withPrefix pre m =
        return val
 
 
+xmlIndent :: XmlM String -> XmlM String
+xmlIndent m =
+  do idn <- getIdn
+     getPrefix >>= pre idn
+  where pre idn True = m >>= return . (++) (replicate idn ' ')
+        pre _ False = m
+        
+
+xmlAttributes :: [(String, String)] -> String
+xmlAttributes [] = ""
+xmlAttributes attrs = ' ':unwords (map (\(id, val) -> id ++ "=\"" ++ val ++ "\"") attrs)
+
+
+xmlStr :: XmlM String -> XmlM String
+xmlStr = xmlIndent
+
+
+xmlShortTag :: String -> [(String, String)] -> XmlM String -> XmlM String
+xmlShortTag tag attrs m =
+  concat <$> sequence [xmlIndent (return ("<" ++ tag ++ xmlAttributes attrs ++ ">")),
+                       withPrefix False m,
+                       return ("</" ++ tag ++ ">")]
+
+
+xmlLongTag :: String -> [(String, String)] -> XmlM String -> XmlM String
+xmlLongTag tag attrs m =
+  getPrefix >>= pre
+  where pre True = concat <$> sequence [xmlIndent (return ("<" ++ tag ++ xmlAttributes attrs ++ ">\n")),
+                                        withIdn m,
+                                        return "\n",
+                                        xmlIndent (return ("</" ++ tag ++ ">"))]
+        pre False = xmlShortTag tag attrs m
+
+
+xmlLongTags :: String -> [(String, String)] -> [XmlM String] -> XmlM String
+xmlLongTags tag attrs ms =
+  getPrefix >>= pre
+   where pre True = xmlLongTag tag attrs $ intercalate "\n" <$> sequence ms
+         pre False = xmlLongTag tag attrs $ concat <$> sequence ms
+
+
 -- | 'docToXml' @mstyle doc@ formats a styled 'Document' @doc@ into a
 -- XML 'String', where @mstyle@ specifies the style 'Document' used to
 -- stylize @doc@.
@@ -75,53 +116,17 @@ docToXml _ doc =
     intercalate "\n" ["<xml>", str, "</xml>"]
     where str = evalState (loop doc) (XmlState 2 True)
 
-          xmlIndent :: XmlM String -> XmlM String
-          xmlIndent m =
-              do idn <- getIdn
-                 getPrefix >>= pre idn
-              where pre idn True = m >>= return . (++) (replicate idn ' ')
-                    pre _ False = m
-
-          xmlAttribute Nothing = []
-          xmlAttribute (Just val) = [("style", val)]
-
-          xmlAttributes [] = ""
-          xmlAttributes attrs = ' ':unwords (map (\(id, val) -> id ++ "=\"" ++ val ++ "\"") attrs)
-
-          xmlStr = xmlIndent
-
-          xmlShortTag :: [(String, String)] -> String -> XmlM String -> XmlM String
-          xmlShortTag attrs tag m =
-              concat <$> sequence [xmlIndent (return ("<" ++ tag ++ xmlAttributes attrs ++ ">")),
-                                   withPrefix False m,
-                                   return ("</" ++ tag ++ ">")]
-
-          xmlLongTag attrs tag m =
-              getPrefix >>= pre
-              where pre True = concat <$> sequence [xmlIndent (return ("<" ++ tag ++ xmlAttributes attrs ++ ">\n")),
-                                                    withIdn m,
-                                                    return "\n",
-                                                    xmlIndent (return ("</" ++ tag ++ ">"))]
-                    pre False = xmlShortTag attrs tag m
-
-          xmlLongTags :: [(String, String)] -> String -> [XmlM String] -> XmlM String
-          xmlLongTags attrs tag ms =
-              getPrefix >>= pre
-              where pre True = xmlLongTag attrs tag $ intercalate "\n" <$> sequence ms
-                    pre False = xmlLongTag attrs tag $ concat <$> sequence ms
-
           loopText :: Text -> XmlM String
-          --loopText (Emphasis str) = withPrefix False $ xmlShortTag [] "em" $ return str
-          loopText (Footnote str) = withPrefix False $ xmlShortTag [] "footnote" $ return str
           loopText (Plain str) = xmlStr $ return str
-          loopText (Span sty txts) = xmlLongTags [] sty [ concat <$> mapM loopText txts ]
+          loopText (Ref str) = xmlShortTag "ref" [] $ return str
+          loopText (Span sty txts) = xmlLongTags sty [] [ concat <$> mapM loopText txts ]
 
           loop :: Document -> XmlM String
-          loop (Heading _ [txts]) = xmlShortTag [] "heading" $ concat <$> mapM loopText txts
-          loop (Heading _ lns) = xmlLongTags [] "heading" [ concat <$> mapM loopText txts | txts <- lns ]
-          loop (Paragraph _ txts) = xmlShortTag [] "paragraph" $ concat <$> mapM loopText txts
-          loop (Content [doc]) = xmlShortTag [] "content" $ loop doc
-          loop (Content docs) = xmlLongTags [] "content" $ map loop docs
-          loop (Section doc) = xmlLongTag [] "section" $ loop doc
-          loop (Style _ sty [txts]) = xmlShortTag [] sty $ concat <$> mapM loopText txts
-          loop (Style _ sty lns) = xmlLongTags [] sty [ concat <$> mapM loopText txts | txts <- lns ]
+          loop (Heading _ [txts]) = xmlShortTag "heading" [] $ concat <$> mapM loopText txts
+          loop (Heading _ lns) = xmlLongTags "heading" [] [ concat <$> mapM loopText txts | txts <- lns ]
+          loop (Paragraph _ txts) = xmlShortTag "paragraph" [] $ concat <$> mapM loopText txts
+          loop (Content [doc]) = xmlShortTag "content" [] $ loop doc
+          loop (Content docs) = xmlLongTags "content" [] $ map loop docs
+          loop (Section doc) = xmlLongTag "section" [] $ loop doc
+          loop (Style _ sty [txts]) = xmlShortTag sty [] $ concat <$> mapM loopText txts
+          loop (Style _ sty lns) = xmlLongTags sty [] [ concat <$> mapM loopText txts | txts <- lns ]

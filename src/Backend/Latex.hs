@@ -50,8 +50,9 @@ seq = intercalate "\n" . filter (\ln -> trim ln /= "")
 
 
 loopText :: Text -> String
-loopText (Footnote str) = com "footnote" str
 loopText (Plain str) = lit str
+loopText (Ref str) = com "label" str
+loopText (Span sty txts) = com sty $ intercalate "\n" $ [ concatMap loopText txts ]
 
 
 properties :: Document -> [(String, String)]
@@ -95,8 +96,8 @@ docToLatexArticle mstyle doc =
                                  loop 0 doc]]
 
 
-docToLatex :: Maybe Document -> Document -> String
-docToLatex mstyle doc =
+docToLatexLetter :: Maybe Document -> Document -> String
+docToLatexLetter mstyle doc =
     let ps = properties doc 
         signature = lookup "Signature" ps
         address = lookup "Address" ps
@@ -122,3 +123,6 @@ docToLatex mstyle doc =
            env "document" $
                envArg "letter" "" $
                    seq [makeOpening, makeLetter, makeClosing]]
+      
+      
+docToLatex = docToLatexArticle
