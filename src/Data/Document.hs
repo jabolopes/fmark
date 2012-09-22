@@ -26,14 +26,14 @@ data Document
     | Section Document
     -- | 'Style' is a 'Document' part that represents a style 'Text'
     -- element, with a source location and a style 'String'.
-    | Style Srcloc String Text
+    | Style Srcloc String [[Text]]
 
 instance Show Document where
-    show (Heading _ docs) = "Heading = " ++ show docs
-    show (Paragraph _ doc) = "Paragraph = " ++ show doc
+    show (Heading _ lns) = "Heading = " ++ show lns
+    show (Paragraph _ txts) = "Paragraph = " ++ show txts
     show (Content docs) = intercalate "\n" $ map show docs
     show (Section doc) = "begin\n" ++ show doc ++ "\nend"
-    show (Style _ sty str) = "(" ++ sty ++ ") = " ++ show str
+    show (Style _ sty lns) = sty ++ " = " ++ show lns
 
 
 -- | 'ensureDocument' @docs@ the first elements of @docs@ if @docs@ is

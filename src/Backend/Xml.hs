@@ -111,9 +111,10 @@ docToXml _ doc =
                     pre False = xmlLongTag attrs tag $ concat <$> sequence ms
 
           loopText :: Text -> XmlM String
-          loopText (Emphasis str) = withPrefix False $ xmlShortTag [] "em" $ return str
+          --loopText (Emphasis str) = withPrefix False $ xmlShortTag [] "em" $ return str
           loopText (Footnote str) = withPrefix False $ xmlShortTag [] "footnote" $ return str
           loopText (Plain str) = xmlStr $ return str
+          loopText (Span sty txts) = xmlLongTags [] sty [ concat <$> mapM loopText txts ]
 
           loop :: Document -> XmlM String
           loop (Heading _ [txts]) = xmlShortTag [] "heading" $ concat <$> mapM loopText txts
@@ -122,4 +123,5 @@ docToXml _ doc =
           loop (Content [doc]) = xmlShortTag [] "content" $ loop doc
           loop (Content docs) = xmlLongTags [] "content" $ map loop docs
           loop (Section doc) = xmlLongTag [] "section" $ loop doc
-          loop (Style _ sty txt) = xmlShortTag [] sty $ loopText txt
+          loop (Style _ sty [txts]) = xmlShortTag [] sty $ concat <$> mapM loopText txts
+          loop (Style _ sty lns) = xmlLongTags [] sty [ concat <$> mapM loopText txts | txts <- lns ]

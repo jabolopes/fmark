@@ -3,6 +3,7 @@
 module Weaver where
 
 import Control.Monad (zipWithM)
+import Data.Functor ((<$>))
 import Data.List (intercalate)
 
 import Data.Document
@@ -59,34 +60,54 @@ msgParagraph loc (_, styStr) = msgLine "paragraph" loc styStr
 -- 'Text' @txt2@ where @loc@ is the 'Srloc' of the produced 'Style'
 -- elements.  'Nothing' is returned if the style cannot be applied.
 weaveText :: Srcloc -> Text -> Text -> Maybe Document
-weaveText loc (Emphasis cnt) (Emphasis sty) =
-    Just $ Style loc (trim sty) $ Plain $ trim cnt
-
 weaveText loc (Footnote cnt) (Footnote sty) =
-    Just $ Style loc (trim sty) $ Plain $ trim cnt
+    Just $ Style loc (trim sty) [[Plain $ trim cnt]]
 
 weaveText loc (Plain cnt) (Plain sty) =
-    Just $ Style loc (trim sty') $ Plain $ trim cnt
+    Just $ Style loc (trim sty') [[Plain $ trim cnt]]
     where sty' | isParagraph sty = init sty
                | otherwise = sty
 
 weaveText _ _ _ = Nothing
 
 
+weaveExtraLine :: Srcloc -> [Text] -> Text -> Maybe Document
+-- weaveExtraLine loc txts (Emphasis sty) = Just $ Style loc (trim sty) [txts]
+weaveExtraLine loc txts (Footnote sty) = Just $ Style loc (trim sty) [txts]
+weaveExtraLine loc txts (Plain sty) = Just $ Style loc (trim sty) [txts]
+
+
 -- | 'weaveLine' @loc txts1 txts2@ weaves 'Text's @txts1@ with style
 -- of @txts2@ where @loc@ is the 'Srcloc' of the produced 'Style'
 -- elements.  'Nothing' is returned if the style cannot be applied.
 weaveLine :: Srcloc -> [Text] -> [Text] -> Maybe [Document]
-weaveLine _ txts1 txts2 | length txts1 /= length txts2 = Nothing
-weaveLine loc txts1 txts2 = zipWithM (weaveText loc) txts1 txts2
+weaveLine _ txts1 txts2 | length txts1 < length txts2 = Nothing
+weaveLine loc txts1 txts2 | length txts1 == length txts2 = zipWithM (weaveText loc) txts1 txts2
+weaveLine loc txts1 txts2 =
+     let (matTxts, unmatTxts) = splitAt (length txts2 - 1) txts1
+     in do docs <- weaveLine loc matTxts $ init txts2
+           doc <- weaveExtraLine loc unmatTxts $ last txts2
+           return $ docs ++ [doc]
+
+
+weaveExtraLines :: Srcloc -> [[Text]] -> [Text] -> Maybe Document
+-- weaveExtraLines loc lns [Emphasis sty] = Just $ Style loc (trim sty) lns
+weaveExtraLines loc lns [Footnote sty] = Just $ Style loc (trim sty) lns
+weaveExtraLines loc lns [Plain sty] = Just $ Style loc (trim sty) lns
+weaveExtraLines _ _ _ = Nothing
 
 
 -- | 'weaveLines' @loc lns1 lns2@ weaves lines @lns1@ with style of
 -- lines @lns2@ where @loc@ is the 'Srcloc' of the produced 'Style'
 -- elements.  'Nothing' is returned if the style cannot be applied.
 weaveLines :: Srcloc -> [[Text]] -> [[Text]] -> Maybe [[Document]]
-weaveLines _ lns1 lns2 | length lns1 /= length lns2 = Nothing
-weaveLines loc lns1 lns2 = zipWithM (weaveLine loc) lns1 lns2
+weaveLines _ lns1 lns2 | length lns1 < length lns2 = Nothing
+weaveLines loc lns1 lns2 | length lns1 == length lns2 = zipWithM (weaveLine loc) lns1 lns2
+weaveLines loc lns1 lns2 =
+    let (matLns, unmatLns) = splitAt (length lns2 - 1) lns1 in
+    do docss <- weaveLines loc matLns $ init lns2
+       doc <- weaveExtraLines loc unmatLns $ last lns2
+       return $ docss ++ [[doc]]
 
 
 -- | 'weaveStyle' @doc style@ combines content 'Document' @doc@ and
