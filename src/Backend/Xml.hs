@@ -108,24 +108,29 @@ xmlLongTags tag attrs ms =
          pre False = xmlLongTag tag attrs $ concat <$> sequence ms
 
 
+xmlListTag :: String -> [(String, String)] -> [XmlM String] -> XmlM String
+xmlListTag tag attrs [m] = xmlShortTag tag attrs m
+xmlListTag tag attrs ms = xmlLongTags tag attrs ms
+
+
 -- | 'docToXml' @mstyle doc@ formats a styled 'Document' @doc@ into a
 -- XML 'String', where @mstyle@ specifies the style 'Document' used to
 -- stylize @doc@.
 docToXml :: Maybe Document -> Document -> String
 docToXml _ doc =
-    intercalate "\n" ["<xml>", str, "</xml>"]
-    where str = evalState (loop doc) (XmlState 2 True)
-
-          loopText :: Text -> XmlM String
+    intercalate "\n" ["<xml>", evalState (loop doc) (XmlState 2 True), "</xml>"]
+    where loopText :: Text -> XmlM String
           loopText (Plain str) = xmlStr $ return str
           loopText (Ref str) = xmlShortTag "ref" [] $ return str
-          loopText (Span sty txts) = xmlLongTags sty [] [ concat <$> mapM loopText txts ]
+          loopText (Span sty txts) = xmlShortTag sty [] $ concat <$> mapM loopText txts
 
           loop :: Document -> XmlM String
-          loop (Heading _ [txts]) = xmlShortTag "heading" [] $ concat <$> mapM loopText txts
+          loop (Heading _ [[txt]]) = xmlShortTag "heading" [] $ loopText txt
+          -- loop (Heading _ [txts]) = xmlShortTag "heading" [] $ concat <$> mapM loopText txts
+          loop (Heading _ [txts]) = xmlLongTags "heading" [] $ map loopText txts
           loop (Heading _ lns) = xmlLongTags "heading" [] [ concat <$> mapM loopText txts | txts <- lns ]
           loop (Paragraph _ txts) = xmlShortTag "paragraph" [] $ concat <$> mapM loopText txts
-          loop (Content [doc]) = xmlShortTag "content" [] $ loop doc
+          -- loop (Content [doc]) = xmlShortTag "content" [] $ loop doc
           loop (Content docs) = xmlLongTags "content" [] $ map loop docs
           loop (Section doc) = xmlLongTag "section" [] $ loop doc
           loop (Style _ sty [txts]) = xmlShortTag sty [] $ concat <$> mapM loopText txts

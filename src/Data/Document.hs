@@ -4,11 +4,7 @@ import Data.Char (isPunctuation)
 import Data.List (intercalate)
 
 import Data.Text
-
-
--- | 'Srcloc' represents an association between 'Document' parts and
--- 'Token' elements.
-type Srcloc = (Int, String)
+import Data.Token
 
 
 -- | 'Document' is a structured representation of the input.
@@ -27,6 +23,8 @@ data Document
     -- | 'Style' is a 'Document' part that represents a style 'Text'
     -- element, with a source location and a style 'String'.
     | Style Srcloc String [[Text]]
+
+    | Unordered [Document]
 
 instance Show Document where
     show (Heading _ lns) = "Heading = " ++ show lns

@@ -36,10 +36,16 @@ filterLines lns = [ ln | ln <- lns, trim ln /= "" ]
 --
 -- > replace "hello\ngoodbye" == "hello,goodbye"
 replace :: Char -> String -> String
-replace c =
-    map loop
+replace c = map loop
     where loop '\n' = c
           loop c = c
+
+
+groupPair :: (a -> a -> Bool) -> [(a,b)] -> [(a,[b])]
+groupPair _  [] =  []
+groupPair eq (x@(x1,x2):xs) =
+    (x1, x2:map snd ys):groupPair eq zs
+    where (ys,zs) = span (\(x1',_) -> eq x1 x1') xs
 
 
 -- | 'indentation' @ln@ is the number of space characters at the

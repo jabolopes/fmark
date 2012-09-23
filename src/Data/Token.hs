@@ -1,11 +1,16 @@
 module Data.Token where
 
 
+-- | 'Srcloc' represents an association between 'Document' parts and
+-- 'Token' elements.
+type Srcloc = (Int, String)
+
+
 -- | 'Token' is an unstructured representation of the input.
 data Token
     -- | 'Literal' corresponds to successive lines of text joined
     -- together.
-    = Literal Int String
+    = Literal Srcloc
     -- | 'BeginSection' represents the beginning of a new section,
     -- i.e., increase in indentation or an unmatched decrease in
     -- indentation.

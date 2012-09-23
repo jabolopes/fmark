@@ -1,6 +1,7 @@
 module Parser where
 
 import Data.Char (isPunctuation, isSpace)
+import Data.List (intercalate)
 
 import Data.Document
 import Data.Text
@@ -10,13 +11,14 @@ import Utils
 import Debug.Trace
 
 
+paragraphTerminator :: [Char]
+paragraphTerminator = ".!?"
+
+
 -- | 'isParagraph' @str@ decides whether @str@ is a paragraph or a
 -- heading.
 isParagraph :: String -> Bool
-isParagraph str =
-    -- isPunctuation c && (not $ c `elem` "()[]'\"")
-    c `elem` ".!?"
-    where c = last str
+isParagraph str = last str `elem` paragraphTerminator
 
 
 -- | 'section' @idns idn@ is the 'List' of 'BeginSection' and
@@ -35,14 +37,15 @@ section (idn1:idns) idn2 =
 -- holding @ln@ preceeded by the appropriate section 'Token's as
 -- issued by 'section' according to the indentation stack @idns@.
 reduce :: [Int] -> Int -> String -> [Token]
-reduce idns n ln = section idns (indentation ln) ++ [Literal n $ trim ln]
+reduce idns n ln = section idns (indentation ln) ++ [Literal (n, trim ln)]
 
 
 -- | 'classify' @str@ is the 'List' of 'Token's of @str@.
 classify :: String -> [Token]
 classify str =
     classify' [0] $ zip [1..] $ lines str
-        where classify' _ [] = []
+        where classify' :: [Int] -> [(Int, String)] -> [Token]
+              classify' _ [] = []
               classify' _ [(_, ln)] | all isSpace ln = []
               classify' idns ((_, ln1):lns) | all isSpace ln1 = classify' idns lns
               classify' idns [(n, ln)] = reduce idns n ln
@@ -55,8 +58,8 @@ classify str =
                         idn2 = indentation ln2
 
 
--- | 'reconstruct' @str@ produces the 'List' of 'Text' elements for
--- 'String' @str@.
+-- | 'reconstructLine' @str@ produces the 'List' of 'Text' elements
+-- for 'String' @str@.
 reconstructLine :: String -> [Text]
 reconstructLine str = reconstruct str
     where block sty = "[" ++ sty ++ " "
@@ -91,20 +94,36 @@ reconstructLines :: String -> [[Text]]
 reconstructLines = map reconstructLine . lines
 
 
+data Prefix = NoPrefix
+            | UnorderedPrefix
+              deriving (Eq)
+
+reconstruct :: Srcloc -> String -> [Document]
+reconstruct srcloc =
+    map reconstruct' . groupPair (==) . map prefix . lines
+    where prefix ('*':' ':str) = (UnorderedPrefix, str)
+          prefix str = (NoPrefix, str)
+
+          reconstruct' :: (Prefix, [String]) -> Document
+          reconstruct' (NoPrefix, strs) | isParagraph (last strs) = Paragraph srcloc $ reconstructLine $ intercalate " " strs
+                                          | otherwise = Heading srcloc $ map reconstructLine strs
+
+          reconstruct' (UnorderedPrefix, strs) = Unordered $ map (Content . reconstruct srcloc) strs
+
+
 -- | 'docify' @tks@ parses the sequence of 'Token's @tks@ into a 'Document'.
 docify :: [Token] -> Document
-docify tks =
-    docify' tks [[]]
+docify tks = docify' tks [[]]
     where docify' :: [Token] -> [[Document]] -> Document
           -- edit: this 'ensureDocument' is interfering with style weaving
           -- docify' [] [docs] = ensureDocument $ reverse docs
           docify' [] [docs] = Content $ reverse docs
           docify' [] st = docify' [EndSection] st
 
-          docify' (Literal n str:tks) (top:st) =
+          docify' (Literal srcloc@(_, str):tks) (top:st) =
               docify' tks ((doc:top):st)
-              where doc | isParagraph str = Paragraph (n, str) $ reconstructLine $ replace ' ' str
-                        | otherwise = Heading (n, str) $ reconstructLines str
+              where doc | isParagraph str = Paragraph srcloc $ reconstructLine $ replace ' ' str
+                        | otherwise = Heading srcloc $ reconstructLines str
 
           docify' (BeginSection:tks) st =
               docify' tks ([]:st)
