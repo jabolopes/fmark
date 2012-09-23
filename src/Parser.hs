@@ -33,27 +33,31 @@ section (idn1:idns) idn2 =
       GT -> EndSection:section (dropWhile (> idn1) idns) idn2
 
 
--- | 'reduce' @idns ln@ is the 'List' containing the 'Text' 'Token'
+tokenize :: Int -> String -> Token
+tokenize n ln = Literal (n, ln)
+
+
+-- 'reduce' @idns ln@ is the 'List' containing the 'Literal' 'Token'
 -- holding @ln@ preceeded by the appropriate section 'Token's as
 -- issued by 'section' according to the indentation stack @idns@.
 reduce :: [Int] -> Int -> String -> [Token]
-reduce idns n ln = section idns (indentation ln) ++ [Literal (n, trim ln)]
+reduce idns n ln = section idns (indentation ln) ++ [tokenize n $ trim ln]
 
 
 -- | 'classify' @str@ is the 'List' of 'Token's of @str@.
 classify :: String -> [Token]
-classify str =
-    classify' [0] $ zip [1..] $ lines str
+classify str = classify' [0] $ zip [1..] $ lines str
         where classify' :: [Int] -> [(Int, String)] -> [Token]
               classify' _ [] = []
               classify' _ [(_, ln)] | all isSpace ln = []
               classify' idns ((_, ln1):lns) | all isSpace ln1 = classify' idns lns
               classify' idns [(n, ln)] = reduce idns n ln
               classify' idns ((n1, ln1):(n2, ln2):lns)
-                  | all isSpace ln2 = reduce idns n1 ln1 ++ classify' (push idn1 (dropWhile (> idn1) idns)) lns
+                  | all isSpace ln2 = reduce idns n1 ln1 ++ [Empty] ++ classify' (push idn1 (dropWhile (> idn1) idns)) lns
                   | idn1 < idn2 = reduce idns n1 ln1 ++ classify' (push idn1 (dropWhile (> idn1) idns)) ((n2, ln2):lns)
                   | idn1 > idn2 = reduce idns n1 ln1 ++ classify' (push idn1 idns) ((n2, ln2):lns)
-                  | otherwise = classify' idns ((n1, join ln1 ln2):lns)
+                  -- | otherwise = classify' idns ((n1, join ln1 ln2):lns)
+                  | otherwise = reduce idns n1 ln1 ++ classify' idns ((n2, ln2):lns)
                   where idn1 = indentation ln1
                         idn2 = indentation ln2
 
@@ -68,6 +72,11 @@ reconstructLine str = reconstruct str
               case span (/= c) str of
                 (hd, []) -> [Plain hd]
                 (hd, _:tl) -> fn hd:reconstruct tl
+                
+          mkSpanText c sty str =
+              case span (/= c) str of
+                (hd, []) -> [Plain hd]
+                (hd, _:tl) -> Span sty [Plain hd]:reconstruct tl
           
           isSpan sty str = take (length (block sty)) str == (block sty)
 
@@ -83,9 +92,12 @@ reconstructLine str = reconstruct str
                           | isSpan "footnote" str = mkSpan "footnote" str
                           | isSpan "cite" str = mkSpan "cite" str
           reconstruct ('[':str) = mkText ']' Ref str
+          -- edit: don't capture quotes in words, e.g., "don't" and "can't"
+          reconstruct ('\'':str) = mkSpanText '\'' "emphasis" str
+          reconstruct ('_':str) = mkSpanText '_' "underline" str
           reconstruct str =
               Plain hd:reconstruct tl
-              where (hd, tl) = span (\c -> not $ elem c "[") str
+              where (hd, tl) = span (\c -> not $ elem c "['_") str
 
 
 -- | 'reconstructLines' @str@ produces the 'List' of 'Text' elements
@@ -98,6 +110,7 @@ data Prefix = NoPrefix
             | UnorderedPrefix
               deriving (Eq)
 
+
 reconstruct :: Srcloc -> String -> [Document]
 reconstruct srcloc =
     map reconstruct' . groupPair (==) . map prefix . lines
@@ -106,9 +119,9 @@ reconstruct srcloc =
 
           reconstruct' :: (Prefix, [String]) -> Document
           reconstruct' (NoPrefix, strs) | isParagraph (last strs) = Paragraph srcloc $ reconstructLine $ intercalate " " strs
-                                          | otherwise = Heading srcloc $ map reconstructLine strs
+                                        | otherwise = Heading srcloc $ map reconstructLine strs
 
-          reconstruct' (UnorderedPrefix, strs) = Unordered $ map (Content . reconstruct srcloc) strs
+          reconstruct' (UnorderedPrefix, strs) = Unordered $ map (Paragraph srcloc . reconstructLine) strs
 
 
 -- | 'docify' @tks@ parses the sequence of 'Token's @tks@ into a 'Document'.
@@ -120,10 +133,14 @@ docify tks = docify' tks [[]]
           docify' [] [docs] = Content $ reverse docs
           docify' [] st = docify' [EndSection] st
 
+          -- docify' (Literal srcloc@(_, str):tks) (top:st) =
+          --     docify' tks ((doc:top):st)
+          --     where doc | isParagraph str = Paragraph srcloc $ reconstructLine $ replace ' ' str
+          --               | otherwise = Heading srcloc $ reconstructLines str
+
           docify' (Literal srcloc@(_, str):tks) (top:st) =
-              docify' tks ((doc:top):st)
-              where doc | isParagraph str = Paragraph srcloc $ reconstructLine $ replace ' ' str
-                        | otherwise = Heading srcloc $ reconstructLines str
+              docify' tks ((docs ++ top):st)
+              where docs = reconstruct srcloc str
 
           docify' (BeginSection:tks) st =
               docify' tks ([]:st)

@@ -2,6 +2,7 @@
 module Fmark where
 
 import Control.Monad ((>=>))
+import Data.List (intercalate)
 
 import System.Directory (copyFile)
 import System.FilePath (addExtension, dropExtensions, combine)
@@ -46,7 +47,10 @@ data Format
     -- | Output to 'stdout' in LaTeX format.
     | FormatLatex
     -- | Output to a PDF file using LaTeX format and 'pdflatex'.
-    | FormatPdf
+    | FormatPdf      
+
+    | FormatToken
+
     -- | Output to 'stdout' in XML format.
     | FormatXml
     deriving (Eq, Show)
@@ -75,6 +79,9 @@ formatH fmt (Right fp) = \str -> withFile fp WriteMode $ \hOut -> formatH fmt (L
 -- an optional style input. 'fmark' return a formatted string
 -- according to @fmt@ and a 'List' of warning messages.
 fmark :: Format -> String -> Maybe String -> (String, [String])
+fmark FormatToken contents _ =
+    (intercalate "\n" $ map show $ classify contents, [])
+
 fmark fmt contents Nothing =
     (formatFn fmt Nothing $ docify $ classify contents, [])
 

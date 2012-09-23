@@ -1,0 +1,31 @@
+* a _normal_ list
+* everything is 'okay'
+* _remember that_ and
+* 'forget it'
+
+* a _nested_ list
+ *  this is a 'sublist'
+ * that _continues_
+* and comes back
+
+* a double nested list
+ * this is the first sublist
+ * which continues
+  * this is the sub-sublist
+  * that also continues
+* and comes back abruptely
+
+
+* a double nested list with a section
+ * this is the first sublist
+ * which continues
+  * this is the sub-sublist
+  * that also continues
+ but the sublist becomes a section
+* and this becomes another list
+
+
+
+
+
+

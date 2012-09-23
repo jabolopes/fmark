@@ -32,6 +32,8 @@ instance Show Document where
     show (Content docs) = intercalate "\n" $ map show docs
     show (Section doc) = "begin\n" ++ show doc ++ "\nend"
     show (Style _ sty lns) = sty ++ " = " ++ show lns
+    
+    show (Unordered docs) = "Unordered = " ++ intercalate "," (map show docs)
 
 
 -- | 'ensureDocument' @docs@ the first elements of @docs@ if @docs@ is

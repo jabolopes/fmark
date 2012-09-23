@@ -19,6 +19,9 @@ data Flag
     | OutputLatex
     -- | Output to a PDF file using LaTeX format and 'pdflatex'.
     | OutputPdf
+      
+    | OutputToken
+
     -- | Output to 'stdout' in XML format.
     | OutputXml
     -- | Display usage information.
@@ -32,6 +35,7 @@ formatOfFlag :: Flag -> Format
 formatOfFlag OutputDoc = FormatDoc
 formatOfFlag OutputLatex = FormatLatex
 formatOfFlag OutputPdf = FormatPdf
+formatOfFlag OutputToken = FormatToken
 formatOfFlag OutputXml = FormatXml
 
 
@@ -40,6 +44,7 @@ options = [Option "d" ["doc"] (NoArg OutputDoc) "Output doc",
            Option "l" ["latex"] (NoArg OutputLatex) "Output latex",
            Option "p" ["pdf"] (NoArg OutputPdf) "Output PDF",
            Option "s" ["style"] (ReqArg StyleName "style-name") "Style",
+           Option "t" ["token"] (NoArg OutputToken) "Output tokens",
            Option "x" ["xml"] (NoArg OutputXml) "Output xml",
            Option [] ["help"] (NoArg Help) "Display help"]
 

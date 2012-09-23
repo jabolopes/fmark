@@ -18,4 +18,6 @@ data Token
     -- | 'EndSection' represents the end of a section, i.e., a
     -- decrease in indentation.
     | EndSection
+      
+    | Empty
       deriving (Show)

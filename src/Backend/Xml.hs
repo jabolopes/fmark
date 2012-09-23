@@ -135,3 +135,5 @@ docToXml _ doc =
           loop (Section doc) = xmlLongTag "section" [] $ loop doc
           loop (Style _ sty [txts]) = xmlShortTag sty [] $ concat <$> mapM loopText txts
           loop (Style _ sty lns) = xmlLongTags sty [] [ concat <$> mapM loopText txts | txts <- lns ]
+          
+          loop (Unordered docs) = xmlLongTags "unordered" [] $ map loop docs

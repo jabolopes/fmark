@@ -74,6 +74,15 @@ prefix pre str =
               concatMap (\c -> case c of
                                  '\n' -> '\n':pre
                                  _ -> [c])
+              
+              
+prefixTail :: String -> String -> String
+prefixTail pre str =
+    prefix' str
+    where prefix' =
+              concatMap (\c -> case c of
+                                 '\n' -> '\n':pre
+                                 _ -> [c])
 
 
 -- | 'push' @x xs@ adds @x@ to @xs@ only if the first element in @xs@
