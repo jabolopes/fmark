@@ -21,3 +21,8 @@ data Token
       
     | Empty
       deriving (Show)
+
+
+isEmpty :: Token -> Bool
+isEmpty Empty = True
+isEmpty _ = False

@@ -10,14 +10,14 @@ import System.IO
 import System.Process
 --import System.Unix.Directory (withTemporaryDirectory)
 
-import Backend.Latex
-import Backend.Xml
+--import Backend.Latex
+--import Backend.Xml
 import Data.Document
 import Data.Text
 import Data.Token
 import Parser
 import Utils
-import Weaver
+--import Weaver
 
 
 -- | 'pdflatex' @outFp contents@ executes the 'pdflatex' 'Process'
@@ -60,9 +60,9 @@ data Format
 -- appropriate formatter function.
 formatFn :: Format -> Maybe Document -> Document -> String
 formatFn FormatDoc = const show
-formatFn FormatLatex = docToLatex
+--formatFn FormatLatex = docToLatex
 formatFn FormatPdf = formatFn FormatLatex
-formatFn FormatXml = docToXml
+--formatFn FormatXml = docToXml
 
 
 -- | 'formatH' @fmt eOut@ maps the output format @fmt@ and either an
@@ -85,11 +85,11 @@ fmark FormatToken contents _ =
 fmark fmt contents Nothing =
     (formatFn fmt Nothing $ docify $ classify contents, [])
 
-fmark fmt contents (Just style) =
-    let doc = docify $ classify contents in
-    let styleDoc = docify $ classify style in
-    let (doc', errs) = weave doc styleDoc in
-    (formatFn fmt (Just styleDoc) doc', errs)
+-- fmark fmt contents (Just style) =
+--     let doc = docify $ classify contents in
+--     let styleDoc = docify $ classify style in
+--     let (doc', errs) = weave doc styleDoc in
+--     (formatFn fmt (Just styleDoc) doc', errs)
 
 
 -- | 'fmarkH' is an alternative version of 'fmark' that uses 'Handle's

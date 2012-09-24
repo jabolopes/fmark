@@ -4,7 +4,7 @@ import Data.Char (isPunctuation, isSpace)
 import Data.List (intercalate)
 
 import Data.Document
-import Data.Text
+--import Data.Text
 import Data.Token
 import Utils
 
@@ -46,109 +46,207 @@ reduce idns n ln = section idns (indentation ln) ++ [tokenize n $ trim ln]
 
 -- | 'classify' @str@ is the 'List' of 'Token's of @str@.
 classify :: String -> [Token]
-classify str = classify' [0] $ zip [1..] $ lines str
-        where classify' :: [Int] -> [(Int, String)] -> [Token]
-              classify' _ [] = []
-              classify' _ [(_, ln)] | all isSpace ln = []
-              classify' idns ((_, ln1):lns) | all isSpace ln1 = classify' idns lns
-              classify' idns [(n, ln)] = reduce idns n ln
-              classify' idns ((n1, ln1):(n2, ln2):lns)
-                  | all isSpace ln2 = reduce idns n1 ln1 ++ [Empty] ++ classify' (push idn1 (dropWhile (> idn1) idns)) lns
-                  | idn1 < idn2 = reduce idns n1 ln1 ++ classify' (push idn1 (dropWhile (> idn1) idns)) ((n2, ln2):lns)
-                  | idn1 > idn2 = reduce idns n1 ln1 ++ classify' (push idn1 idns) ((n2, ln2):lns)
-                  -- | otherwise = classify' idns ((n1, join ln1 ln2):lns)
-                  | otherwise = reduce idns n1 ln1 ++ classify' idns ((n2, ln2):lns)
-                  where idn1 = indentation ln1
-                        idn2 = indentation ln2
+classify str =
+    if isEmpty $ last tks then
+        init tks
+    else
+        tks
+    where tks = classify' [0] $ zip [1..] $ lines str
+
+          classify' :: [Int] -> [(Int, String)] -> [Token]
+          classify' _ [] = []
+          classify' _ [(_, ln)] | all isSpace ln = []
+          classify' idns ((_, ln1):lns) | all isSpace ln1 = classify' idns lns
+          classify' idns [(n, ln)] = reduce idns n ln
+          classify' idns ((n1, ln1):(n2, ln2):lns)
+              | all isSpace ln2 = reduce idns n1 ln1 ++ [Empty] ++ classify' (push idn1 (dropWhile (> idn1) idns)) lns
+              | idn1 < idn2 = reduce idns n1 ln1 ++ classify' (push idn1 (dropWhile (> idn1) idns)) ((n2, ln2):lns)
+              | idn1 > idn2 = reduce idns n1 ln1 ++ classify' (push idn1 idns) ((n2, ln2):lns)
+              -- | otherwise = classify' idns ((n1, join ln1 ln2):lns)
+              | otherwise = reduce idns n1 ln1 ++ classify' (push idn1 (dropWhile (> idn1) idns)) ((n2, ln2):lns)
+              where idn1 = indentation ln1
+                    idn2 = indentation ln2
 
 
--- | 'reconstructLine' @str@ produces the 'List' of 'Text' elements
+-- 'reconstruct' @str@ produces the 'List' of 'Text' elements
 -- for 'String' @str@.
-reconstructLine :: String -> [Text]
-reconstructLine str = reconstruct str
+reconstruct :: String -> [Document]
+reconstruct ln = reconstruct' ln
     where block sty = "[" ++ sty ++ " "
 
-          mkText c fn str =
-              case span (/= c) str of
-                (hd, []) -> [Plain hd]
-                (hd, _:tl) -> fn hd:reconstruct tl
-                
-          mkSpanText c sty str =
-              case span (/= c) str of
-                (hd, []) -> [Plain hd]
-                (hd, _:tl) -> Span sty [Plain hd]:reconstruct tl
-          
-          isSpan sty str = take (length (block sty)) str == (block sty)
+          -- mkText c fn str =
+          --     case span (/= c) str of
+          --       (hd, []) -> [Plain hd]
+          --       (hd, _:tl) -> fn hd:reconstruct' tl
 
-          mkSpan sty str =
-              case span (/= ']') (drop (length (block sty)) str) of
-                (hd, []) -> [Plain hd]
-                (hd, _:tl) -> Span sty (reconstructLine hd):reconstruct tl
+          spanChar :: Char -> String -> String -> [Document]
+          spanChar c sty str =
+              case span (/= c) str of
+                (hd, []) -> [mkPlain hd]
+                (hd, _:tl) -> mkSpan sty [mkPlain hd]:reconstruct' tl
 
-          reconstruct "" = []
-          reconstruct str | isSpan "bold" str = mkSpan "bold" str
-                          | isSpan "italic" str = mkSpan "italic" str
-                          | isSpan "underline" str = mkSpan "underline" str
-                          | isSpan "footnote" str = mkSpan "footnote" str
-                          | isSpan "cite" str = mkSpan "cite" str
-          reconstruct ('[':str) = mkText ']' Ref str
+          -- isSpan sty str = take (length (block sty)) str == (block sty)
+
+          -- mkSpanElement sty str =
+          --     case span (/= ']') (drop (length (block sty)) str) of
+          --       (hd, []) -> [mkPlain hd]
+          --       (hd, _:tl) -> mkSpan sty (reconstruct' hd):reconstruct' tl
+
+
+          reconstruct' :: String -> [Document]
+          reconstruct' "" = []
+          -- reconstruct' str | isSpan "bold" str = mkSpanElement "bold" str
+          --                 | isSpan "italic" str = mkSpanElement "italic" str
+          --                 | isSpan "underline" str = mkSpanElement "underline" str
+          --                 | isSpan "footnote" str = mkSpanElement "footnote" str
+          --                 | isSpan "cite" str = mkSpanElement "cite" str
+          -- reconstruct' ('[':str) = mkText ']' Ref str
           -- edit: don't capture quotes in words, e.g., "don't" and "can't"
-          reconstruct ('\'':str) = mkSpanText '\'' "emphasis" str
-          reconstruct ('_':str) = mkSpanText '_' "underline" str
-          reconstruct str =
-              Plain hd:reconstruct tl
+          reconstruct' ('\'':str) = spanChar '\'' "emphasis" str
+          reconstruct' ('_':str) = spanChar '_' "underline" str
+          reconstruct' str =
+              mkPlain hd:reconstruct' tl
               where (hd, tl) = span (\c -> not $ elem c "['_") str
 
 
--- | 'reconstructLines' @str@ produces the 'List' of 'Text' elements
--- for each line in @str@.
-reconstructLines :: String -> [[Text]]
-reconstructLines = map reconstructLine . lines
+-- data Prefix = NoPrefix
+--             | UnorderedPrefix
+--               deriving (Eq)
 
 
-data Prefix = NoPrefix
-            | UnorderedPrefix
-              deriving (Eq)
+-- refactor :: Srcloc -> [String] -> [Document]
+-- refactor srcloc =
+--     map refactor' . groupPair (==) . map split
+--     where split ('*':' ':str) = (UnorderedPrefix, str)
+--           split str = (NoPrefix, str)
+
+--           refactor' :: (Prefix, [String]) -> Document
+--           refactor' (NoPrefix, strs) | isParagraph (last strs) = Paragraph srcloc $ reconstruct $ intercalate " " strs
+--                                      | otherwise = Heading srcloc $ map reconstruct strs
+
+--           refactor' (UnorderedPrefix, strs) = Unordered $ map (Paragraph srcloc . refactorLine) strs
 
 
-reconstruct :: Srcloc -> String -> [Document]
-reconstruct srcloc =
-    map reconstruct' . groupPair (==) . map prefix . lines
-    where prefix ('*':' ':str) = (UnorderedPrefix, str)
-          prefix str = (NoPrefix, str)
+isUnorderedItem ('*':' ':_) = True
+isUnorderedItem _ = False
 
-          reconstruct' :: (Prefix, [String]) -> Document
-          reconstruct' (NoPrefix, strs) | isParagraph (last strs) = Paragraph srcloc $ reconstructLine $ intercalate " " strs
-                                        | otherwise = Heading srcloc $ map reconstructLine strs
 
-          reconstruct' (UnorderedPrefix, strs) = Unordered $ map (Paragraph srcloc . reconstructLine) strs
+refactor :: [String] -> [Document]
+refactor [] = []
+refactor lns | isUnorderedItem $ head lns =
+    let
+        (items, lns') = span isUnorderedItem lns
+        doc = mkEnumeration $ map (mkItem . reconstruct) items
+    in
+      doc:refactor lns'
+
+refactor lns =
+    let
+        (strs, lns') = span (not . isUnorderedItem) lns
+        doc = if isParagraph $ last strs then
+                  mkParagraph $ reconstruct $ intercalate " " strs
+              else
+                  mkHeading $ map reconstruct strs
+    in
+      doc:refactor lns'
+
+
+-- > Literal ...
+-- > Literal ...
+-- > Enumeration ...
+-- > Literal ...
+--
+-- > Section
+-- >  Item ...
+-- >  Item ...
+-- >  Enumeration ...
+-- >  Paragraph ...
+-- or
+-- > Enumeration
+-- >  Item ...
+-- >  Item
+-- >  Enumeration
+restructure :: [Either Srcloc Document] -> Document
+restructure locs =
+    reorganize $ restructure' locs
+    where restructure' [] = []          
+          restructure' locs | isLeft (head locs) =
+              let
+                  (locs', docs) = span isLeft locs
+                  locs'' = map fromLeft locs'
+                  strs = map snd locs''
+              in
+                refactor strs ++ restructure' docs
+
+          restructure' docs =
+              let
+                  (docs', locs) = span (not . isLeft) docs
+                  docs'' = map fromRight docs'
+              in
+                docs'' ++ restructure' locs
+
+          reorganize docs | all (\doc -> isEnumeration doc || isItem doc) docs = mkEnumeration docs
+                          | otherwise = mkContent docs
+                  
+
+
+isLeft :: Either a b -> Bool
+isLeft (Left _) = True
+isLeft _ = False
+
+
+fromLeft :: Either a b -> a
+fromLeft (Left x) = x
+
+
+fromRight :: Either a b -> b
+fromRight (Right x) = x
 
 
 -- | 'docify' @tks@ parses the sequence of 'Token's @tks@ into a 'Document'.
 docify :: [Token] -> Document
-docify tks = docify' tks [[]]
-    where docify' :: [Token] -> [[Document]] -> Document
+docify tks = docify' tks [[]] [[]]
+    where --docify' :: [Token] -> [[Document]] -> Document
           -- edit: this 'ensureDocument' is interfering with style weaving
           -- docify' [] [docs] = ensureDocument $ reverse docs
-          docify' [] [docs] = Content $ reverse docs
-          docify' [] st = docify' [EndSection] st
 
-          -- docify' (Literal srcloc@(_, str):tks) (top:st) =
-          --     docify' tks ((doc:top):st)
-          --     where doc | isParagraph str = Paragraph srcloc $ reconstructLine $ replace ' ' str
-          --               | otherwise = Heading srcloc $ reconstructLines str
+          -- reduceLocs locs = ensureDocument $ reconstruct (head locs) $ map snd locs
 
-          docify' (Literal srcloc@(_, str):tks) (top:st) =
-              docify' tks ((docs ++ top):st)
-              where docs = reconstruct srcloc str
 
-          docify' (BeginSection:tks) st =
-              docify' tks ([]:st)
+          shift :: Srcloc -> [Token] -> [[Either Srcloc Document]] -> [[Document]] -> Document
+          shift srcloc tks (topTks:stTks) stDocs =
+              docify' tks ((Left srcloc:topTks):stTks) stDocs
 
-          docify' (EndSection:tks) (top:bot:st) =
-              docify' tks ((Section (ensureDocument $ reverse top):bot):st)
+          pushTokens :: [Token] -> [[Either Srcloc Document]] -> [[Document]] -> Document
+          pushTokens tks stTks stDocs =
+              docify' tks ([]:stTks) stDocs
 
-          docify' tks st =
-              error $ "\n\n\tdocify: docify': unhandled case" ++
-                      "\n\n\t tks = " ++ show tks ++
-                      "\n\n\t st = " ++ show st ++ "\n\n"
+          reduceEndSection tks (locs:stTks) stDocs = undefined
+              -- let
+              --     doc = case reduceLocs locs of
+              --             doc | isContent doc -> Section doc
+              --             doc -> doc
+              --     docs' = reconstruct (head locs') $ map snd locs'
+              -- in
+              --   docify' tks ([]:stTks) ((doc:reverse docs'):stDocs)
+
+          reduceEmpty tks (locs:stTks) (topDocs:stDocs) =
+              let doc = restructure locs in
+              pushTokens tks stTks ((doc:topDocs):stDocs)
+
+
+          docify' :: [Token] -> [[Either Srcloc Document]] -> [[Document]] -> Document
+          docify' [] _ [docs] = mkContent $ reverse docs
+          docify' [] stTks stDocs = docify' [EndSection] stTks stDocs
+
+          docify' (Literal srcloc:tks) stTks stDocs =
+              shift srcloc tks stTks stDocs
+
+          docify' (BeginSection:tks) stTks stDocs =
+              pushTokens tks stTks stDocs
+ 
+          docify' (EndSection:tks) stTks stDocs =
+              reduceEndSection tks stTks stDocs
+
+          docify' (Empty:tks) stTks stDocs =
+              reduceEmpty tks stTks stDocs
