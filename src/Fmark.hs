@@ -11,7 +11,7 @@ import System.Process
 --import System.Unix.Directory (withTemporaryDirectory)
 
 --import Backend.Latex
---import Backend.Xml
+import Backend.Xml
 import Data.Document
 import Data.Text
 import Data.Token
@@ -62,7 +62,7 @@ formatFn :: Format -> Maybe Document -> Document -> String
 formatFn FormatDoc = const show
 --formatFn FormatLatex = docToLatex
 formatFn FormatPdf = formatFn FormatLatex
---formatFn FormatXml = docToXml
+formatFn FormatXml = docToXml
 
 
 -- | 'formatH' @fmt eOut@ maps the output format @fmt@ and either an

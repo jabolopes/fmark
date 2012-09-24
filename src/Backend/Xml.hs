@@ -6,7 +6,7 @@ import Data.Functor ((<$>))
 import Data.List (intercalate)
 
 import Data.Document
-import Data.Text
+--import Data.Text
 
 
 -- | 'XmlState' is the XML generator state that records the current
@@ -89,28 +89,32 @@ xmlShortTag tag attrs m =
   concat <$> sequence [xmlIndent (return ("<" ++ tag ++ xmlAttributes attrs ++ ">")),
                        withPrefix False m,
                        return ("</" ++ tag ++ ">")]
+  
+  
+xmlShortTags :: String -> [(String, String)] -> [XmlM String] -> XmlM String
+xmlShortTags tag attrs ms = xmlShortTag tag attrs $ concat <$> sequence ms
 
 
 xmlLongTag :: String -> [(String, String)] -> XmlM String -> XmlM String
 xmlLongTag tag attrs m =
-  getPrefix >>= pre
-  where pre True = concat <$> sequence [xmlIndent (return ("<" ++ tag ++ xmlAttributes attrs ++ ">\n")),
-                                        withIdn m,
-                                        return "\n",
-                                        xmlIndent (return ("</" ++ tag ++ ">"))]
-        pre False = xmlShortTag tag attrs m
+   getPrefix >>= pre
+   where pre True = concat <$> sequence [xmlIndent (return ("<" ++ tag ++ xmlAttributes attrs ++ ">\n")),
+                                         withIdn m,
+                                         return "\n",
+                                         xmlIndent (return ("</" ++ tag ++ ">"))]
+         pre False = xmlShortTag tag attrs m
 
 
 xmlLongTags :: String -> [(String, String)] -> [XmlM String] -> XmlM String
 xmlLongTags tag attrs ms =
-  getPrefix >>= pre
+   getPrefix >>= pre
    where pre True = xmlLongTag tag attrs $ intercalate "\n" <$> sequence ms
          pre False = xmlLongTag tag attrs $ concat <$> sequence ms
 
 
-xmlListTag :: String -> [(String, String)] -> [XmlM String] -> XmlM String
-xmlListTag tag attrs [m] = xmlShortTag tag attrs m
-xmlListTag tag attrs ms = xmlLongTags tag attrs ms
+tag :: String -> [(String, String)] -> [XmlM String] -> XmlM String
+tag t attrs [m] = xmlShortTag t attrs m
+tag t attrs ms = xmlLongTags t attrs ms
 
 
 -- | 'docToXml' @mstyle doc@ formats a styled 'Document' @doc@ into a
@@ -118,22 +122,18 @@ xmlListTag tag attrs ms = xmlLongTags tag attrs ms
 -- stylize @doc@.
 docToXml :: Maybe Document -> Document -> String
 docToXml _ doc =
-    intercalate "\n" ["<xml>", evalState (loop doc) (XmlState 2 True), "</xml>"]
-    where loopText :: Text -> XmlM String
-          loopText (Plain str) = xmlStr $ return str
-          loopText (Ref str) = xmlShortTag "ref" [] $ return str
-          loopText (Span sty txts) = xmlShortTag sty [] $ concat <$> mapM loopText txts
+    intercalate "\n" ["<xml>", evalState (docToXml' doc) (XmlState 2 True), "</xml>"]
+    where elementTag :: Element -> ([XmlM String] -> XmlM String)
+          elementTag Content = xmlLongTags "content" []
+          elementTag Enumeration = xmlLongTags "enumeration" []
+          elementTag Heading = xmlLongTags "heading" []
+          elementTag Item = xmlShortTags "item" []
+          elementTag Paragraph = tag "paragraph" []
+          elementTag (Plain str) = const $ xmlStr $ return str
+          elementTag Section = xmlLongTags "section" []
+          elementTag (Span sty) = tag sty []
+          elementTag (Style sty) = xmlLongTags sty []
 
-          loop :: Document -> XmlM String
-          loop (Heading _ [[txt]]) = xmlShortTag "heading" [] $ loopText txt
-          -- loop (Heading _ [txts]) = xmlShortTag "heading" [] $ concat <$> mapM loopText txts
-          loop (Heading _ [txts]) = xmlLongTags "heading" [] $ map loopText txts
-          loop (Heading _ lns) = xmlLongTags "heading" [] [ concat <$> mapM loopText txts | txts <- lns ]
-          loop (Paragraph _ txts) = xmlShortTag "paragraph" [] $ concat <$> mapM loopText txts
-          -- loop (Content [doc]) = xmlShortTag "content" [] $ loop doc
-          loop (Content docs) = xmlLongTags "content" [] $ map loop docs
-          loop (Section doc) = xmlLongTag "section" [] $ loop doc
-          loop (Style _ sty [txts]) = xmlShortTag sty [] $ concat <$> mapM loopText txts
-          loop (Style _ sty lns) = xmlLongTags sty [] [ concat <$> mapM loopText txts | txts <- lns ]
-          
-          loop (Unordered docs) = xmlLongTags "unordered" [] $ map loop docs
+          docToXml' :: Document -> XmlM String
+          docToXml' (Document _ el docs) =
+             elementTag el $ map docToXml' docs
