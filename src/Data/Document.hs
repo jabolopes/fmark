@@ -68,6 +68,9 @@ mkPlain :: String -> Document
 mkPlain str = Document (0, "") (Plain str) []
 
 
+mkSection :: [Document] -> Document
+mkSection = Document (0, "") Section
+
 mkSpan :: String -> [Document] -> Document
 mkSpan sty docs = Document (0, "") (Span sty) docs
 

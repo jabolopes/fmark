@@ -1,5 +1,6 @@
 module Parser where
 
+import Control.Monad
 import Data.Char (isPunctuation, isSpace)
 import Data.List (intercalate)
 
@@ -207,14 +208,13 @@ docify tks = docify' tks [[]] [[]]
           pushTokens tks stTks stDocs =
               docify' tks ([]:stTks) stDocs
 
-          reduceEndSection tks (locs:stTks) stDocs = undefined
-              -- let
-              --     doc = case reduceLocs locs of
-              --             doc | isContent doc -> Section doc
-              --             doc -> doc
-              --     docs' = reconstruct (head locs') $ map snd locs'
-              -- in
-              --   docify' tks ([]:stTks) ((doc:reverse docs'):stDocs)
+          reduceEndSection tks (locs:topLocs:stTks) stDocs =
+              let
+                  doc = case restructure locs of
+                          docs | all (liftM2 (||) isEnumeration isItem) docs -> mkEnumeration docs
+                          docs -> mkSection docs
+              in
+                pushTokens tks stTks ((doc:topLocs):stDocs)
 
           reduceEmpty tks (locs:stTks) (topDocs:stDocs) =
               let docs = restructure locs in
