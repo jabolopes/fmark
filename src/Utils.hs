@@ -90,9 +90,10 @@ prefixTail pre str =
 --
 -- > push 1 [2,3] == [1,2,3]
 -- > push 1 [1,3] == [1,3]
-push :: Eq a => a -> [a] -> [a]
-push x (y:ys) | x /= y = x:y:ys
-push _ xs = xs
+push :: Ord a => a -> [a] -> [a]
+push x xs = push' x (dropWhile (> x) xs)
+    where push' x (y:ys) | x /= y = x:y:ys
+          push' _ xs = xs
 
 
 -- | 'trim' @str@ removes leading and trailing space characters from

@@ -56,15 +56,17 @@ classify str =
 
           classify' :: [Int] -> [(Int, String)] -> [Token]
           classify' _ [] = []
+          -- edit: make this a log? enable on verbose?
+          -- classify' idns (ln:_) | trace ("classify' " ++ show idns ++ "  " ++ show ln) False = undefined
           classify' _ [(_, ln)] | all isSpace ln = []
           classify' idns ((_, ln1):lns) | all isSpace ln1 = classify' idns lns
           classify' idns [(n, ln)] = reduce idns n ln
           classify' idns ((n1, ln1):(n2, ln2):lns)
               | all isSpace ln2 = reduce idns n1 ln1 ++ [Empty] ++ classify' (push idn1 (dropWhile (> idn1) idns)) lns
               | idn1 < idn2 = reduce idns n1 ln1 ++ classify' (push idn1 (dropWhile (> idn1) idns)) ((n2, ln2):lns)
-              | idn1 > idn2 = reduce idns n1 ln1 ++ classify' (push idn1 idns) ((n2, ln2):lns)
+              | idn1 > idn2 = reduce idns n1 ln1 ++ classify' (push idn1 (dropWhile (> idn1) idns)) ((n2, ln2):lns)
               -- | otherwise = classify' idns ((n1, join ln1 ln2):lns)
-              | otherwise = reduce idns n1 ln1 ++ classify' (push idn1 (dropWhile (> idn1) idns)) ((n2, ln2):lns)
+              | otherwise = reduce idns n1 ln1 ++ classify' (push idn2 (dropWhile (> idn1) idns)) ((n2, ln2):lns)
               where idn1 = indentation ln1
                     idn2 = indentation ln2
 
@@ -199,40 +201,55 @@ fromRight (Right x) = x
 
 -- | 'docify' @tks@ parses the sequence of 'Token's @tks@ into a 'Document'.
 docify :: [Token] -> Document
-docify tks = docify' tks [[]] [[]]
-    where shift :: Srcloc -> [Token] -> [[Either Srcloc Document]] -> [[Document]] -> Document
+docify tks = docify' tks [[]] []
+    where shift :: Srcloc -> [Token] -> [[Either Srcloc Document]] -> [Document] -> Document
           shift srcloc tks (topTks:stTks) stDocs =
               docify' tks ((Left srcloc:topTks):stTks) stDocs
 
-          pushTokens :: [Token] -> [[Either Srcloc Document]] -> [[Document]] -> Document
-          pushTokens tks stTks stDocs =
-              docify' tks ([]:stTks) stDocs
+          goto :: [Token] -> [[Either Srcloc Document]] -> [Document] -> Document
+          goto tks stTks stDocs = docify' tks ([]:stTks) stDocs
 
+          reduceEndSection :: [Token] -> [[Either Srcloc Document]] -> [Document] -> Document
           reduceEndSection tks (locs:topLocs:stTks) stDocs =
               let
-                  doc = case restructure locs of
-                          docs | all (liftM2 (||) isEnumeration isItem) docs -> mkEnumeration docs
-                          docs -> mkSection docs
+                  doc' = case restructure locs of
+                           docs | all (\doc -> isEnumeration doc || isItem doc) docs -> mkEnumeration docs
+                           docs -> mkSection docs
               in
-                pushTokens tks stTks ((doc:topLocs):stDocs)
+                docify' tks ((Right doc':topLocs):stTks) stDocs
 
-          reduceEmpty tks (locs:stTks) (topDocs:stDocs) =
-              let docs = restructure locs in
-              pushTokens tks stTks ((docs ++ topDocs):stDocs)
+          reduceEndSection tks stLocs stDocs =
+              error $ "\n\n\treduceEndSection: unhandled case" ++
+                      "\n\n\t tks = " ++ show tks ++
+                      "\n\n\t stLocs " ++ show stLocs ++
+                      "\n\n\t stDocs " ++ show stDocs ++
+                      "\n\n\t length tks = " ++ show (length tks) ++
+                      "\n\n\t length stLocs " ++ show (length stLocs) ++
+                      "\n\n\t length stDocs " ++ show (length stDocs) ++ "\n\n"
 
-          docify' :: [Token] -> [[Either Srcloc Document]] -> [[Document]] -> Document
-          docify' [] [[]] [docs] = mkContent $ reverse docs
-          docify' [] stLocs stDocs | length stDocs > 1 = docify' [EndSection] stLocs stDocs
+          reduceEmpty :: [Token] -> [[Either Srcloc Document]] -> [Document] -> Document
+          reduceEmpty tks (locs:stLocs) stDocs =
+              goto tks stLocs (restructure locs ++ stDocs)
+
+          reduceEmpty tks stLocs stDocs =
+              error $ "\n\n\treduceEmpty: unhandled case" ++
+                      "\n\n\t tks = " ++ show tks ++
+                      "\n\n\t stLocs " ++ show stLocs ++
+                      "\n\n\t stDocs " ++ show stDocs ++ "\n\n"
+
+          docify' :: [Token] -> [[Either Srcloc Document]] -> [Document] -> Document
+          docify' [] [[]] docs = mkContent $ reverse docs
+          docify' [] stLocs stDocs | length stLocs > 1 = reduceEndSection [] stLocs stDocs
           docify' [] stLocs stDocs = reduceEmpty [] stLocs stDocs
 
-          docify' (Literal srcloc:tks) stTks stDocs =
-              shift srcloc tks stTks stDocs
+          docify' (Literal loc:tks) stLocs stDocs =
+              shift loc tks stLocs stDocs
 
-          docify' (BeginSection:tks) stTks stDocs =
-              pushTokens tks stTks stDocs
+          docify' (BeginSection:tks) stLocs stDocs =
+              goto tks stLocs stDocs
 
-          docify' (EndSection:tks) stTks stDocs =
-              reduceEndSection tks stTks stDocs
+          docify' (EndSection:tks) stLocs stDocs =
+              reduceEndSection tks stLocs stDocs
 
-          docify' (Empty:tks) stTks stDocs =
-              reduceEmpty tks stTks stDocs
+          docify' (Empty:tks) stLocs stDocs =
+              reduceEmpty tks stLocs stDocs
