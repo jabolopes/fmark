@@ -117,83 +117,77 @@ isUnorderedItem ('*':' ':_) = True
 isUnorderedItem _ = False
 
 
--- > Literal str1
--- > Literal str2
---
--- > Paragraph str1 str2
--- or
--- > Heading str1 str2
--- or
--- > Item str1
--- > Item str2
-refactor :: [String] -> [Document]
-refactor [] = []
-refactor lns | isUnorderedItem $ head lns =
-    let
-        (items, lns') = span isUnorderedItem lns
-        -- info: 'drop 2' drops the '* '
-        docs = map (mkItem . reconstruct . drop 2) items
-    in
-      docs ++ refactor lns'
-
-refactor lns =
-    let
-        (strs, lns') = span (not . isUnorderedItem) lns
-        doc = if isParagraph $ last strs then
-                  mkParagraph $ reconstruct $ intercalate " " strs
-              else
-                  mkHeading $ map reconstruct strs
-    in
-      doc:refactor lns'
-
-
--- > Literal * ...
--- > Literal * ...
--- > Enumeration ...
--- > Literal ...
--- > Literal ...
+-- Example
+-- > * ...
 --
 -- > Item ...
--- > Item ...
+--
+-- Example
+-- > ...
+--
+-- > Content ...
+spanify :: String -> Document
+spanify ln | isUnorderedItem ln = mkItem $ reconstruct $ drop 2 ln
+spanify ln = mkContent $ reconstruct ln
+
+
+-- > * ...
+-- > * ...
 -- > Enumeration ...
--- > Paragraph ...
--- or
--- > Item ...
--- > Item ...
+-- > * ...
+--
+-- > Enumeration
+-- >  * ...
+-- >  * ...
+-- >  Enumeration ...
+-- >  * ...
+--
+--
+-- > * ...
+-- > * ...
 -- > Enumeration ...
+-- > ... .
+-- >
+-- > Paragraph
+-- >  Item ...
+-- >  Item ...
+-- >  Enumeration ...
+-- >  Content ... .
+--
+--
+-- > * ...
+-- > * ...
+-- > Enumeration ...
+-- > ...
+-- >
 -- > Heading
-restructure :: [Either Srcloc Document] -> [Document]
-restructure locs =
-    restructure' locs
-    where restructure' [] = []          
-          restructure' locs | isLeft (head locs) =
-              let
-                  (locs', docs) = span isLeft locs
-                  locs'' = map fromLeft locs'
-                  strs = map snd locs''
-              in
-                refactor strs ++ restructure' docs
+-- >  Item ...
+-- >  Item ...
+-- >  Enumeration ...
+-- >  Content ...
+blockify :: Bool -> [Either Srcloc Document] -> Document
+blockify blocklevel locs =
+    restructure $ map blockify' locs
+    where blockify' (Left (_, str)) = spanify str
+          blockify' (Right doc) = doc
 
-          restructure' docs =
-              let
-                  (docs', locs) = span (not . isLeft) docs
-                  docs'' = map fromRight docs'
-              in
-                docs'' ++ restructure' locs
+          restructure docs | all (\doc -> isEnumeration doc || isItem doc) docs = mkEnumeration docs
+          restructure docs | not blocklevel = mkSection docs
+          -- edit: what about headings?
+          restructure docs = mkParagraph docs
 
 
-
-isLeft :: Either a b -> Bool
-isLeft (Left _) = True
-isLeft _ = False
-
-
-fromLeft :: Either a b -> a
-fromLeft (Left x) = x
+-- isLeft :: Either a b -> Bool
+-- isLeft (Left _) = True
+-- isLeft _ = False
 
 
-fromRight :: Either a b -> b
-fromRight (Right x) = x
+-- fromLeft :: Either a b -> a
+-- fromLeft (Left x) = x
+
+
+-- fromRight :: Either a b -> b
+-- fromRight (Right x) = x
 
 
 -- | 'docify' @tks@ parses the sequence of 'Token's @tks@ into a 'Document'.
@@ -208,12 +202,8 @@ docify tks = docify' tks [[]] []
 
           reduceEndSection :: [Token] -> [[Either Srcloc Document]] -> [Document] -> Document
           reduceEndSection tks (locs:topLocs:stTks) stDocs =
-              let
-                  doc' = case restructure $ reverse locs of
-                           docs | all (\doc -> isEnumeration doc || isItem doc) docs -> mkEnumeration docs
-                           docs -> mkSection docs
-              in
-                docify' tks ((Right doc':topLocs):stTks) stDocs
+              let doc = blockify False $ reverse locs in
+              docify' tks ((Right doc:topLocs):stTks) stDocs
 
           reduceEndSection tks stLocs stDocs =
               error $ "\n\n\treduceEndSection: unhandled case" ++
@@ -226,12 +216,8 @@ docify tks = docify' tks [[]] []
 
           reduceEmpty :: [Token] -> [[Either Srcloc Document]] -> [Document] -> Document
           reduceEmpty tks (locs:stLocs) stDocs =
-              let
-                  docs = case restructure $ reverse locs of
-                           docs | all (\doc -> isEnumeration doc || isItem doc) docs -> [mkEnumeration docs]
-                           docs -> docs
-              in
-                goto tks stLocs (reverse docs ++ stDocs)
+              let doc = blockify True $ reverse locs in
+              goto tks stLocs (doc:stDocs)
 
           reduceEmpty tks stLocs stDocs =
               error $ "\n\n\treduceEmpty: unhandled case" ++
