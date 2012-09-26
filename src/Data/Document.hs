@@ -53,7 +53,7 @@ mkEnumeration = Document (0, "") Enumeration
 
 
 mkHeading :: [[Document]] -> Document
-mkHeading = Document (0, "") Heading . map mkContent
+mkHeading = Document (0, "") Heading . map mkItem
 
 
 mkItem :: [Document] -> Document

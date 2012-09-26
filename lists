@@ -16,6 +16,25 @@
 * and comes back abruptely
 
 
+* LIST and PARAGRAPH
+ * this is the sublist
+ * that also continues
+LIST and PARAGRAPH ENDS.
+
+
+PARAGRAPH and LIST
+* this is the list
+ * this is the sublist
+ * that also continues
+
+
+PARAGRAPH and LIST and PARAGRAPH
+* this is the list
+ * this is the sublist
+ * that also continues
+PARAGRAPH and LIST and PARAGRAPH END.
+
+
 * a double nested list with a section
  * this is the first sublist
  * which continues
@@ -26,6 +45,10 @@
 
 
 
-
-
-
+* LAST LIST
+ * this is the first sublist
+  * which continues
+   * this is the sub-sublist
+   * that also continues
+  but the sublist becomes a section
+* LAST LIST END

@@ -132,9 +132,9 @@ refactor lns | isUnorderedItem $ head lns =
     let
         (items, lns') = span isUnorderedItem lns
         -- info: 'drop 2' drops the '* '
-        doc = mkEnumeration $ map (mkItem . reconstruct . drop 2) items
+        docs = map (mkItem . reconstruct . drop 2) items
     in
-      doc:refactor lns'
+      docs ++ refactor lns'
 
 refactor lns =
     let
@@ -147,21 +147,21 @@ refactor lns =
       doc:refactor lns'
 
 
--- > Literal ...
--- > Literal ...
+-- > Literal * ...
+-- > Literal * ...
 -- > Enumeration ...
 -- > Literal ...
+-- > Literal ...
 --
--- > Section
--- >  Item ...
--- >  Item ...
--- >  Enumeration ...
--- >  Paragraph ...
+-- > Item ...
+-- > Item ...
+-- > Enumeration ...
+-- > Paragraph ...
 -- or
--- > Enumeration
--- >  Item ...
--- >  Item
--- >  Enumeration
+-- > Item ...
+-- > Item ...
+-- > Enumeration ...
+-- > Heading
 restructure :: [Either Srcloc Document] -> [Document]
 restructure locs =
     restructure' locs
@@ -180,9 +180,6 @@ restructure locs =
                   docs'' = map fromRight docs'
               in
                 docs'' ++ restructure' locs
-
-          -- reorganize docs | all (\doc -> isEnumeration doc || isItem doc) docs = mkEnumeration docs
-          --                 | otherwise = mkContent docs
 
 
 
@@ -212,7 +209,7 @@ docify tks = docify' tks [[]] []
           reduceEndSection :: [Token] -> [[Either Srcloc Document]] -> [Document] -> Document
           reduceEndSection tks (locs:topLocs:stTks) stDocs =
               let
-                  doc' = case restructure locs of
+                  doc' = case restructure $ reverse locs of
                            docs | all (\doc -> isEnumeration doc || isItem doc) docs -> mkEnumeration docs
                            docs -> mkSection docs
               in
@@ -229,7 +226,12 @@ docify tks = docify' tks [[]] []
 
           reduceEmpty :: [Token] -> [[Either Srcloc Document]] -> [Document] -> Document
           reduceEmpty tks (locs:stLocs) stDocs =
-              goto tks stLocs (restructure locs ++ stDocs)
+              let
+                  docs = case restructure $ reverse locs of
+                           docs | all (\doc -> isEnumeration doc || isItem doc) docs -> [mkEnumeration docs]
+                           docs -> docs
+              in
+                goto tks stLocs (reverse docs ++ stDocs)
 
           reduceEmpty tks stLocs stDocs =
               error $ "\n\n\treduceEmpty: unhandled case" ++
