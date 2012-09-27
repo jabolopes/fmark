@@ -3,28 +3,7 @@ module Data.Document where
 import Data.Char (isPunctuation)
 import Data.List (intercalate)
 
---import Data.Text
 import Data.Token
-
-
--- -- | 'Document' is a structured representation of the input.
--- data Document
---     -- | 'Heading' is a 'Document' part with a source location and
---     -- heading content.
---     = Heading Srcloc [[Text]]
---     -- | 'Paragraph' is a 'Document' part with a source location and
---     -- paragraph content.
---     | Paragraph Srcloc [Text]
---     -- | 'Content' is a 'Document' part that represents a sequence of
---     -- 'Document's.
---     | Content [Document]
---     -- | 'Section' is a 'Document' part that represents a subsection.
---     | Section Document
---     -- | 'Style' is a 'Document' part that represents a style 'Text'
---     -- element, with a source location and a style 'String'.
---     | Style Srcloc String [[Text]]
-
---     | Unordered [Document]
 
 
 data Element

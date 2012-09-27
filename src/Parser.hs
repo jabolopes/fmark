@@ -174,6 +174,9 @@ blockify blocklevel locs =
           restructure docs | not blocklevel = mkSection docs
           -- edit: what about headings?
           restructure docs = mkParagraph docs
+          
+          isParagraphBlock (Document _ (Plain str) _) = isParagraph str
+          isParagraphBlock (Document _ _ docs) = isParagraphBlock $ last docs
 
 
 -- isLeft :: Either a b -> Bool
