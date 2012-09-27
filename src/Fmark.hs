@@ -13,7 +13,6 @@ import System.Process
 --import Backend.Latex
 import Backend.Xml
 import Data.Document
-import Data.Text
 import Data.Token
 import Parser
 import Utils

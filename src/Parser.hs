@@ -5,7 +5,6 @@ import Data.Char (isPunctuation, isSpace)
 import Data.List (intercalate)
 
 import Data.Document
---import Data.Text
 import Data.Token
 import Utils
 

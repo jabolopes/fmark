@@ -7,7 +7,6 @@ import Data.Functor ((<$>))
 import Data.List (intercalate)
 
 import Data.Document
-import Data.Text
 import Data.Token
 import Parser
 import Utils
