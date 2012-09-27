@@ -11,14 +11,15 @@ import Utils
 import Debug.Trace
 
 
-paragraphTerminator :: [Char]
-paragraphTerminator = ".!?"
+isEmptyLn :: String -> Bool
+isEmptyLn = all isSpace
 
 
 -- | 'isParagraph' @str@ decides whether @str@ is a paragraph or a
 -- heading.
 isParagraph :: String -> Bool
 isParagraph str = last str `elem` paragraphTerminator
+    where paragraphTerminator = ".!?"
 
 
 -- | 'section' @idns idn@ is the 'List' of 'BeginSection' and
@@ -33,39 +34,42 @@ section (idn1:idns) idn2 =
       GT -> EndSection:section (dropWhile (> idn1) idns) idn2
 
 
-tokenize :: Int -> String -> Token
-tokenize n ln = Literal (n, ln)
+tokenize :: Int -> [Int] -> String -> Token
+tokenize n idns ln = Literal (n, idns, ln)
 
 
 -- 'reduce' @idns ln@ is the 'List' containing the 'Literal' 'Token'
 -- holding @ln@ preceeded by the appropriate section 'Token's as
 -- issued by 'section' according to the indentation stack @idns@.
 reduce :: [Int] -> Int -> String -> [Token]
-reduce idns n ln = section idns (indentation ln) ++ [tokenize n $ trim ln]
+reduce idns n ln = section idns idn ++ [tokenize n (push idn idns) $ trim ln]
+    where idn = indentation ln
 
 
 -- | 'classify' @str@ is the 'List' of 'Token's of @str@.
 classify :: String -> [Token]
-classify str =
-    if isEmpty $ last tks then
-        init tks
-    else
-        tks
-    where tks = classify' [0] $ zip [1..] $ lines str
-
-          classify' :: [Int] -> [(Int, String)] -> [Token]
+classify str = classify' [0] $ zip [1..] $ lines str
+    where classify' :: [Int] -> [(Int, String)] -> [Token]
           classify' _ [] = []
           -- edit: make this a log? enable on verbose?
           -- classify' idns (ln:_) | trace ("classify' " ++ show idns ++ "  " ++ show ln) False = undefined
-          classify' _ [(_, ln)] | all isSpace ln = []
-          classify' idns ((_, ln1):lns) | all isSpace ln1 = classify' idns lns
+          classify' _ [(_, ln)] | isEmptyLn ln = []
+          classify' idns ((_, ln1):lns) | isEmptyLn ln1 = classify' idns lns
           classify' idns [(n, ln)] = reduce idns n ln
           classify' idns ((n1, ln1):(n2, ln2):lns)
-              | all isSpace ln2 = reduce idns n1 ln1 ++ [Empty] ++ classify' (push idn1 (dropWhile (> idn1) idns)) lns
-              | idn1 < idn2 = reduce idns n1 ln1 ++ classify' (push idn1 (dropWhile (> idn1) idns)) ((n2, ln2):lns)
-              | idn1 > idn2 = reduce idns n1 ln1 ++ classify' (push idn1 (dropWhile (> idn1) idns)) ((n2, ln2):lns)
-              -- | otherwise = classify' idns ((n1, join ln1 ln2):lns)
-              | otherwise = reduce idns n1 ln1 ++ classify' (push idn2 (dropWhile (> idn1) idns)) ((n2, ln2):lns)
+              | isEmptyLn ln2 =
+                  let
+                      ln1' = reduce idns n1 ln1
+                      lns' = classify' (push idn1 idns) lns
+                  in
+                    case lns' of
+                      [] -> ln1'
+                      BeginSection:_ -> ln1' ++ lns'
+                      EndSection:_ -> ln1' ++ lns'
+                      _ -> ln1' ++ [Empty] ++ lns'
+              | idn1 < idn2 = reduce idns n1 ln1 ++ classify' (push idn1 idns) ((n2, ln2):lns)
+              | idn1 > idn2 = reduce idns n1 ln1 ++ classify' (push idn1 idns) ((n2, ln2):lns)
+              | otherwise = reduce idns n1 ln1 ++ classify' (push idn2 idns) ((n2, ln2):lns)
               where idn1 = indentation ln1
                     idn2 = indentation ln2
 
@@ -136,10 +140,10 @@ spanify ln = mkContent $ reconstruct ln
 -- > * ...
 --
 -- > Enumeration
--- >  * ...
--- >  * ...
+-- >  Item ...
+-- >  Item ...
 -- >  Enumeration ...
--- >  * ...
+-- >  Item ...
 --
 --
 -- > * ...
@@ -148,9 +152,10 @@ spanify ln = mkContent $ reconstruct ln
 -- > ... .
 -- >
 -- > Paragraph
--- >  Item ...
--- >  Item ...
--- >  Enumeration ...
+-- >  Enumeration
+-- >   Item ...
+-- >   Item ...
+-- >   Enumeration ...
 -- >  Content ... .
 --
 --
@@ -160,20 +165,28 @@ spanify ln = mkContent $ reconstruct ln
 -- > ...
 -- >
 -- > Heading
--- >  Item ...
--- >  Item ...
--- >  Enumeration ...
+-- >  Enumeration
+-- >   Item ...
+-- >   Item ...
+-- >   Enumeration ...
 -- >  Content ...
 blockify :: Bool -> [Either Srcloc Document] -> Document
 blockify blocklevel locs =
     restructure $ map blockify' locs
-    where blockify' (Left (_, str)) = spanify str
+    where blockify' (Left (_, _, str)) = spanify str
           blockify' (Right doc) = doc
 
           restructure docs | all (\doc -> isEnumeration doc || isItem doc) docs = mkEnumeration docs
-          restructure docs | not blocklevel = mkSection docs
+          restructure docs | not blocklevel = mkSection $ enumerate docs
           -- edit: what about headings?
-          restructure docs = mkParagraph docs
+          restructure docs = mkParagraph $ enumerate docs
+
+          enumerate [] = []
+          enumerate locs@(doc:_) | isEnumeration doc || isItem doc =
+              let (items, docs) = span (\doc -> isEnumeration doc || isItem doc) locs in
+              mkEnumeration items:enumerate docs
+
+          enumerate (doc:docs) = doc:enumerate docs
           
           isParagraphBlock (Document _ (Plain str) _) = isParagraph str
           isParagraphBlock (Document _ _ docs) = isParagraphBlock $ last docs

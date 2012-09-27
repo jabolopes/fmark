@@ -24,34 +24,34 @@ data Document = Document Srcloc Element [Document]
 
 
 mkContent :: [Document] -> Document
-mkContent = Document (0, "") Content
+mkContent = Document (0, [], "") Content
 
 
 mkEnumeration :: [Document] -> Document
-mkEnumeration = Document (0, "") Enumeration
+mkEnumeration = Document (0, [], "") Enumeration
 
 
 mkHeading :: [[Document]] -> Document
-mkHeading = Document (0, "") Heading . map mkContent
+mkHeading = Document (0, [], "") Heading . map mkContent
 
 
 mkItem :: [Document] -> Document
-mkItem = Document (0, "") Item
+mkItem = Document (0, [], "") Item
 
 
 mkParagraph :: [Document] -> Document
-mkParagraph = Document (0, "") Paragraph
+mkParagraph = Document (0, [], "") Paragraph
 
 
 mkPlain :: String -> Document
-mkPlain str = Document (0, "") (Plain str) []
+mkPlain str = Document (0, [], "") (Plain str) []
 
 
 mkSection :: [Document] -> Document
-mkSection = Document (0, "") Section
+mkSection = Document (0, [], "") Section
 
 mkSpan :: String -> [Document] -> Document
-mkSpan sty docs = Document (0, "") (Span sty) docs
+mkSpan sty docs = Document (0, [], "") (Span sty) docs
 
 
 isEnumeration :: Document -> Bool

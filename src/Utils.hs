@@ -85,15 +85,13 @@ prefixTail pre str =
                                  _ -> [c])
 
 
--- | 'push' @x xs@ adds @x@ to @xs@ only if the first element in @xs@
+-- 'push' @x xs@ adds @x@ to @xs@ only if the first element in @xs@
 -- is different from @x@.
 --
 -- > push 1 [2,3] == [1,2,3]
 -- > push 1 [1,3] == [1,3]
 push :: Ord a => a -> [a] -> [a]
-push x xs = push' x (dropWhile (> x) xs)
-    where push' x (y:ys) | x /= y = x:y:ys
-          push' _ xs = xs
+push x xs = x:dropWhile (>= x) xs
 
 
 -- | 'trim' @str@ removes leading and trailing space characters from

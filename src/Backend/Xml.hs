@@ -6,7 +6,6 @@ import Data.Functor ((<$>))
 import Data.List (intercalate)
 
 import Data.Document
---import Data.Text
 
 
 -- | 'XmlState' is the XML generator state that records the current
@@ -124,7 +123,7 @@ docToXml :: Maybe Document -> Document -> String
 docToXml _ doc =
     intercalate "\n" ["<xml>", evalState (docToXml' doc) (XmlState 2 True), "</xml>"]
     where elementTag :: Element -> ([XmlM String] -> XmlM String)
-          elementTag Content = tag "content" []
+          elementTag Content = xmlLongTags "content" []
           elementTag Enumeration = xmlLongTags "enumeration" []
           elementTag Heading = xmlLongTags "heading" []
           elementTag Item = xmlShortTags "item" []

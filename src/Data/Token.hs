@@ -3,7 +3,7 @@ module Data.Token where
 
 -- | 'Srcloc' represents an association between 'Document' parts and
 -- 'Token' elements.
-type Srcloc = (Int, String)
+type Srcloc = (Int, [Int], String)
 
 
 -- | 'Token' is an unstructured representation of the input.
