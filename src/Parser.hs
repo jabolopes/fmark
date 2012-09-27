@@ -65,7 +65,7 @@ classify str = classify' [0] $ zip [1..] $ lines str
                     case lns' of
                       [] -> ln1'
                       BeginSection:_ -> ln1' ++ lns'
-                      EndSection:_ -> ln1' ++ lns'
+                      EndSection:lns'' -> ln1' ++ [EndSection, Empty] ++ lns''
                       _ -> ln1' ++ [Empty] ++ lns'
               | idn1 < idn2 = reduce idns n1 ln1 ++ classify' (push idn1 idns) ((n2, ln2):lns)
               | idn1 > idn2 = reduce idns n1 ln1 ++ classify' (push idn1 idns) ((n2, ln2):lns)
