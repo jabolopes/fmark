@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 module Parser where
 
 import Control.Monad
@@ -77,7 +78,7 @@ classify str = classify' [0] $ zip [1..] $ lines str
 -- 'reconstruct' @str@ produces the 'List' of 'Text' elements
 -- for 'String' @str@.
 reconstruct :: String -> [Document]
-reconstruct ln = reconstruct' ln
+reconstruct = reconstruct'
     where block sty = "[" ++ sty ++ " "
 
           -- mkText c fn str =
@@ -112,7 +113,7 @@ reconstruct ln = reconstruct' ln
           reconstruct' ('_':str) = spanChar '_' "underline" str
           reconstruct' str =
               mkPlain hd:reconstruct' tl
-              where (hd, tl) = span (\c -> not $ elem c "['_") str
+              where (hd, tl) = span (`notElem` "['_") str
 
 
 isUnorderedItem :: String -> Bool
@@ -230,6 +231,10 @@ docify tks = docify' tks [[]] []
                       "\n\n\t length stDocs " ++ show (length stDocs) ++ "\n\n"
 
           reduceEmpty :: [Token] -> [[Either Srcloc Document]] -> [Document] -> Document
+          reduceEmpty tks ls@(locs:stLocs) stDocs | length ls > 1 =
+              let doc = blockify True $ reverse locs in
+              docify' tks ([Right doc]:stLocs) stDocs
+
           reduceEmpty tks (locs:stLocs) stDocs =
               let doc = blockify True $ reverse locs in
               goto tks stLocs (doc:stDocs)

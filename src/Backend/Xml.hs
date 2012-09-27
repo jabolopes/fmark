@@ -123,7 +123,7 @@ docToXml :: Maybe Document -> Document -> String
 docToXml _ doc =
     intercalate "\n" ["<xml>", evalState (docToXml' doc) (XmlState 2 True), "</xml>"]
     where elementTag :: Element -> ([XmlM String] -> XmlM String)
-          elementTag Content = xmlLongTags "content" []
+          elementTag Content = tag "content" []
           elementTag Enumeration = xmlLongTags "enumeration" []
           elementTag Heading = xmlLongTags "heading" []
           elementTag Item = xmlShortTags "item" []
