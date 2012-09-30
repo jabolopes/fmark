@@ -51,12 +51,9 @@ reduce idns n ln = section idns idn ++ [tokenize n (push idn idns) $ trim ln]
 classify :: String -> [Token]
 classify str = classify' [0] $ zip [1..] $ lines str
     where classify' :: [Int] -> [(Int, String)] -> [Token]
-          classify' _ [] = []
-          -- edit: make this a log? enable on verbose?
-          -- classify' idns (ln:_) | trace ("classify' " ++ show idns ++ "  " ++ show ln) False = undefined
-          classify' _ [(_, ln)] | isEmptyLn ln = []
-          classify' idns ((_, ln1):lns) | isEmptyLn ln1 = classify' idns lns
-          classify' idns [(n, ln)] = reduce idns n ln
+          classify' idns [] = replicate (length idns - 1) EndSection
+          classify' idns ((_, ln):lns) | isEmptyLn ln = classify' idns lns
+          classify' idns [(n, ln)] = reduce idns n ln ++ classify' (push (indentation ln) idns) []
           classify' idns ((n1, ln1):(n2, ln2):lns)
               | isEmptyLn ln2 =
                   let
@@ -65,7 +62,6 @@ classify str = classify' [0] $ zip [1..] $ lines str
                   in
                     case lns' of
                       [] -> ln1'
-                      BeginSection:_ -> ln1' ++ lns'
                       EndSection:lns'' -> ln1' ++ [EndSection, Empty] ++ lns''
                       _ -> ln1' ++ [Empty] ++ lns'
               | idn1 < idn2 = reduce idns n1 ln1 ++ classify' (push idn1 idns) ((n2, ln2):lns)
@@ -120,6 +116,8 @@ isUnorderedItem :: String -> Bool
 isUnorderedItem ('*':' ':_) = True
 isUnorderedItem _ = False
 
+isEnumOrItem doc = isEnumeration doc || isItem doc
+
 
 -- Example
 -- > * ...
@@ -135,19 +133,22 @@ spanify ln | isUnorderedItem ln = mkItem $ reconstruct $ drop 2 ln
 spanify ln = mkContent $ reconstruct ln
 
 
--- > * ...
+enumerate [] = []
+enumerate docs@(item:_) | isEnumOrItem item =
+    let (items, docs') = span isEnumOrItem docs in
+    mkEnumeration items:enumerate docs'
+enumerate (doc:docs) = doc:enumerate docs
+
+
+-- Example
 -- > * ...
 -- > Enumeration ...
--- > * ...
 --
 -- > Enumeration
 -- >  Item ...
--- >  Item ...
 -- >  Enumeration ...
--- >  Item ...
 --
---
--- > * ...
+-- Example
 -- > * ...
 -- > Enumeration ...
 -- > ... .
@@ -155,12 +156,10 @@ spanify ln = mkContent $ reconstruct ln
 -- > Paragraph
 -- >  Enumeration
 -- >   Item ...
--- >   Item ...
 -- >   Enumeration ...
 -- >  Content ... .
 --
---
--- > * ...
+-- Example
 -- > * ...
 -- > Enumeration ...
 -- > ...
@@ -168,96 +167,84 @@ spanify ln = mkContent $ reconstruct ln
 -- > Heading
 -- >  Enumeration
 -- >   Item ...
+-- >   Enumeration ...
+-- >  Content ...
+blockify :: [Either Srcloc Document] -> Document
+blockify locs =
+    restructure $ map spanify' locs
+    where spanify' (Left (_, _, str)) = spanify str
+          spanify' (Right doc) = doc
+
+          restructure docs | all isEnumOrItem docs = mkEnumeration docs
+          restructure docs = mkParagraph $ enumerate docs
+          
+          -- isParagraphBlock (Document _ (Plain str) _) = isParagraph str
+          -- isParagraphBlock (Document _ _ docs) = isParagraphBlock $ last docs
+
+-- Example
+-- > Item ...
+-- > Enumeration ...
+--
+-- > Enumeration
+-- >  Item ...
+-- >  Enumeration ...
+--
+-- Example
+-- > Item ...
+-- > Enumeration ...
+-- > Content ...
+-- >
+-- > Section
+-- >  Enumeration
 -- >   Item ...
 -- >   Enumeration ...
 -- >  Content ...
-blockify :: Bool -> [Either Srcloc Document] -> Document
-blockify blocklevel locs =
-    restructure $ map blockify' locs
-    where blockify' (Left (_, _, str)) = spanify str
-          blockify' (Right doc) = doc
-
-          restructure docs | all (\doc -> isEnumeration doc || isItem doc) docs = mkEnumeration docs
-          restructure docs | not blocklevel = mkSection $ enumerate docs
-          -- edit: what about headings?
-          restructure docs = mkParagraph $ enumerate docs
-
-          enumerate [] = []
-          enumerate locs@(doc:_) | isEnumeration doc || isItem doc =
-              let (items, docs) = span (\doc -> isEnumeration doc || isItem doc) locs in
-              mkEnumeration items:enumerate docs
-
-          enumerate (doc:docs) = doc:enumerate docs
-          
-          isParagraphBlock (Document _ (Plain str) _) = isParagraph str
-          isParagraphBlock (Document _ _ docs) = isParagraphBlock $ last docs
-
-
--- isLeft :: Either a b -> Bool
--- isLeft (Left _) = True
--- isLeft _ = False
-
-
--- fromLeft :: Either a b -> a
--- fromLeft (Left x) = x
-
-
--- fromRight :: Either a b -> b
--- fromRight (Right x) = x
+sectionify [doc] | isEnumeration doc = doc
+sectionify docs | all isEnumOrItem docs = mkEnumeration docs
+sectionify docs = mkSection docs
 
 
 -- | 'docify' @tks@ parses the sequence of 'Token's @tks@ into a 'Document'.
 docify :: [Token] -> Document
-docify tks = docify' tks [[]] []
-    where shift :: Srcloc -> [Token] -> [[Either Srcloc Document]] -> [Document] -> Document
-          shift srcloc tks (topTks:stTks) stDocs =
-              docify' tks ((Left srcloc:topTks):stTks) stDocs
+docify tks = fst $ docify' tks [] []
+    where 
+          shift :: Srcloc -> [Token] -> [Either Srcloc Document] -> [Document] -> (Document, [Token])
+          shift loc tks locs docs =
+              docify' tks (Left loc:locs) docs
 
-          goto :: [Token] -> [[Either Srcloc Document]] -> [Document] -> Document
-          goto tks stTks stDocs = docify' tks ([]:stTks) stDocs
 
-          reduceEndSection :: [Token] -> [[Either Srcloc Document]] -> [Document] -> Document
-          reduceEndSection tks (locs:topLocs:stTks) stDocs =
-              let doc = blockify False $ reverse locs in
-              docify' tks ((Right doc:topLocs):stTks) stDocs
+          pushPop :: [Token] -> [Either Srcloc Document] -> [Document] -> (Document, [Token])
+          pushPop tks locs docs =
+              let (doc, tks') = docify' tks [] [] in
+              docify' tks' (Right doc:locs) docs
 
-          reduceEndSection tks stLocs stDocs =
-              error $ "\n\n\treduceEndSection: unhandled case" ++
-                      "\n\n\t tks = " ++ show tks ++
-                      "\n\n\t stLocs " ++ show stLocs ++
-                      "\n\n\t stDocs " ++ show stDocs ++
-                      "\n\n\t length tks = " ++ show (length tks) ++
-                      "\n\n\t length stLocs " ++ show (length stLocs) ++
-                      "\n\n\t length stDocs " ++ show (length stDocs) ++ "\n\n"
+          
+          reduceEmpty :: [Token] -> [Either Srcloc Document] -> [Document] -> (Document, [Token])
+          reduceEmpty tks locs docs =
+              let doc = blockify $ reverse locs in
+              docify' tks [] (doc:docs)
 
-          reduceEmpty :: [Token] -> [[Either Srcloc Document]] -> [Document] -> Document
-          reduceEmpty tks ls@(locs:stLocs) stDocs | length ls > 1 =
-              let doc = blockify True $ reverse locs in
-              docify' tks ([Right doc]:stLocs) stDocs
+          
+          reduceSection :: [Token] -> [Either Srcloc Document] -> [Document] -> (Document, [Token])
+          reduceSection tks locs docs =
+              let doc = blockify $ reverse locs in
+              (sectionify $ reverse $ doc:docs, tks)
 
-          reduceEmpty tks (locs:stLocs) stDocs =
-              let doc = blockify True $ reverse locs in
-              goto tks stLocs (doc:stDocs)
 
-          reduceEmpty tks stLocs stDocs =
-              error $ "\n\n\treduceEmpty: unhandled case" ++
-                      "\n\n\t tks = " ++ show tks ++
-                      "\n\n\t stLocs " ++ show stLocs ++
-                      "\n\n\t stDocs " ++ show stDocs ++ "\n\n"
+          docify' :: [Token] -> [Either Srcloc Document] -> [Document] -> (Document, [Token])
+          docify' [] [] docs = (mkContent $ reverse docs, [])
 
-          docify' :: [Token] -> [[Either Srcloc Document]] -> [Document] -> Document
-          docify' [] [[]] docs = mkContent $ reverse docs
-          docify' [] stLocs stDocs | length stLocs > 1 = reduceEndSection [] stLocs stDocs
-          docify' [] stLocs stDocs = reduceEmpty [] stLocs stDocs
+          docify' [] locs docs =
+              reduceEmpty [] locs docs
 
-          docify' (Literal loc:tks) stLocs stDocs =
-              shift loc tks stLocs stDocs
+          docify' (Literal loc:tks) locs docs =
+              shift loc tks locs docs
 
-          docify' (BeginSection:tks) stLocs stDocs =
-              goto tks stLocs stDocs
+          docify' (BeginSection:tks) locs docs =
+              pushPop tks locs docs
 
-          docify' (EndSection:tks) stLocs stDocs =
-              reduceEndSection tks stLocs stDocs
+          docify' (EndSection:tks) locs docs =
+              reduceSection tks locs docs
 
-          docify' (Empty:tks) stLocs stDocs =
-              reduceEmpty tks stLocs stDocs
+          docify' (Empty:tks) locs docs =
+              reduceEmpty tks locs docs
