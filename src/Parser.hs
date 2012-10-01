@@ -19,8 +19,8 @@ isEmptyLn = all isSpace
 
 -- 'isParagraphItemLn' @str@ decides whether @str@ is a paragraph or
 -- a heading.
-isParagraphItemLn :: String -> Bool
-isParagraphItemLn str = last str `elem` paragraphTerminator
+isHeadingItemLn :: String -> Bool
+isHeadingItemLn str = last str `notElem` paragraphTerminator
     where paragraphTerminator = ".!?"
 
 
@@ -155,15 +155,15 @@ blockify :: [Either Srcloc Document] -> Document
 blockify locs =
     restructure $ map spanifyEither locs
     where spanify ln | isUnorderedItemLn ln = mkItem UnorderedT $ reconstruct $ drop 2 ln
-                     | isParagraphItemLn ln = mkItem ParagraphT $ reconstruct $ drop 2 ln
-                     | otherwise = mkItem HeadingT $ reconstruct $ drop 2 ln
+                     | isHeadingItemLn ln = mkItem HeadingT $ reconstruct ln
+                     | otherwise = mkItem ParagraphT $ reconstruct ln
 
           spanifyEither (Left (_, _, str)) = spanify str
           spanifyEither (Right doc) = doc
 
+          restructure [doc] | isSection doc || isEnumeration doc = doc
           restructure docs | all isEnumOrUnorderedItem docs = mkEnumeration docs
           restructure docs | all isHeadingItem docs = mkHeading docs
-          restructure [doc] | isSection doc = doc
           restructure docs = mkParagraph $ enumerate docs
 
           enumerate [] = []
@@ -173,6 +173,11 @@ blockify locs =
           enumerate (doc:docs) = doc:enumerate docs
 
 
+-- Example
+-- > Enumeration
+-- >
+-- > Enumeration
+--
 -- Example
 -- > Item ...
 -- > Enumeration ...
@@ -184,15 +189,15 @@ blockify locs =
 -- Example
 -- > Item ...
 -- > Enumeration ...
--- > Content ...
+-- > ...
 -- >
 -- > Section
 -- >  Enumeration
 -- >   Item ...
 -- >   Enumeration ...
--- >  Content ...
+-- >  ...
 sectionify [doc] | isEnumeration doc = doc
-sectionify docs | all isEnumOrUnorderedItem docs = mkEnumeration docs
+sectionify docs | all isEnumOrUnorderedItem docs && any isUnorderedItem docs = mkEnumeration docs
 sectionify docs = mkSection docs
 
 
