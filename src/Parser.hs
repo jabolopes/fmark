@@ -118,24 +118,8 @@ reconstruct = reconstruct'
               where (hd, tl) = span (`notElem` "['_") str
 
 
-isEnumOrItem :: Document -> Bool
-isEnumOrItem = (||) `fmap` isEnumeration `ap` isUnorderedItem
-
-
--- Example
--- > * ...
---
--- > Item ...
---
--- Example
--- > ...
---
--- > Content ...
-spanify :: String -> Document
-spanify ln = mkItem t $ reconstruct ln
-    where t | isUnorderedItemLn ln = UnorderedT
-            | isParagraphItemLn ln = ParagraphT
-            | otherwise = HeadingT
+isEnumOrUnorderedItem :: Document -> Bool
+isEnumOrUnorderedItem = (||) `fmap` isEnumeration `ap` isUnorderedItem
 
 
 -- Example
@@ -169,20 +153,22 @@ spanify ln = mkItem t $ reconstruct ln
 -- >  Content ...
 blockify :: [Either Srcloc Document] -> Document
 blockify locs =
-    restructure $ map spanify' locs
-    where spanify' (Left (_, _, str)) = spanify str
-          spanify' (Right doc) = doc
+    restructure $ map spanifyEither locs
+    where spanify ln | isUnorderedItemLn ln = mkItem UnorderedT $ reconstruct $ drop 2 ln
+                     | isParagraphItemLn ln = mkItem ParagraphT $ reconstruct $ drop 2 ln
+                     | otherwise = mkItem HeadingT $ reconstruct $ drop 2 ln
 
-          restructure docs | all isEnumOrItem docs = mkEnumeration docs
-          restructure docs =
-              let docs' = enumerate docs in
-              case last docs' of
-                doc | isHeadingItem doc -> mkHeading docs'
-                    | otherwise -> mkParagraph docs'
+          spanifyEither (Left (_, _, str)) = spanify str
+          spanifyEither (Right doc) = doc
+
+          restructure docs | all isEnumOrUnorderedItem docs = mkEnumeration docs
+          restructure docs | all isHeadingItem docs = mkHeading docs
+          restructure [doc] | isSection doc = doc
+          restructure docs = mkParagraph $ enumerate docs
 
           enumerate [] = []
-          enumerate docs@(item:_) | isEnumOrItem item =
-              let (items, docs') = span isEnumOrItem docs in
+          enumerate docs@(item:_) | isEnumOrUnorderedItem item =
+              let (items, docs') = span isEnumOrUnorderedItem docs in
               mkEnumeration items:enumerate docs'
           enumerate (doc:docs) = doc:enumerate docs
 
@@ -206,7 +192,7 @@ blockify locs =
 -- >   Enumeration ...
 -- >  Content ...
 sectionify [doc] | isEnumeration doc = doc
-sectionify docs | all isEnumOrItem docs = mkEnumeration docs
+sectionify docs | all isEnumOrUnorderedItem docs = mkEnumeration docs
 sectionify docs = mkSection docs
 
 

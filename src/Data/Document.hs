@@ -1,16 +1,13 @@
 module Data.Document where
 
-import Data.Char (isPunctuation)
-import Data.List (intercalate)
-
-import Data.Token
+import Data.Token (Srcloc)
 
 
 data ItemT
     = HeadingT
     | ParagraphT
     | UnorderedT
-      deriving (Show)
+      deriving (Eq, Show)
 
 
 data Element
@@ -23,7 +20,7 @@ data Element
     | Section
     | Span String
     | Style String
-      deriving (Show)
+      deriving (Eq, Show)
 
 
 data Document = Document Srcloc Element [Document]
@@ -62,26 +59,25 @@ mkSpan :: String -> [Document] -> Document
 mkSpan sty docs = Document (0, [], "") (Span sty) docs
 
 
+isDocument :: Element -> Document -> Bool
+isDocument t1 (Document _ t2 _) = t1 == t2
+
+
 isEnumeration :: Document -> Bool
-isEnumeration (Document _ Enumeration _) = True
-isEnumeration _ = False
+isEnumeration = isDocument Enumeration
 
 
--- isItem :: Document -> Bool
--- isItem (Document _ (Item _) _) = True
--- isItem _ = False
+isSection :: Document -> Bool
+isSection = isDocument Section
 
 
 isHeadingItem :: Document -> Bool
-isHeadingItem (Document _ (Item HeadingT) _) = True
-isHeadingItem _ = False
+isHeadingItem = isDocument (Item HeadingT)
 
 
 isParagraphItem :: Document -> Bool
-isParagraphItem (Document _ (Item ParagraphT) _) = True
-isParagraphItem _ = False
+isParagraphItem = isDocument (Item ParagraphT)
 
 
 isUnorderedItem :: Document -> Bool
-isUnorderedItem (Document _ (Item UnorderedT) _) = True
-isUnorderedItem _ = False
+isUnorderedItem = isDocument (Item UnorderedT)
