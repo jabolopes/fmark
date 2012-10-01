@@ -176,7 +176,7 @@ blockify locs =
               let (items, docs') = span isEnumOrItem docs in
               mkEnumeration items:enumerate docs'
           enumerate (doc:docs) = doc:enumerate docs
-          
+
           -- isParagraphBlock (Document _ (Plain str) _) = isParagraph str
           -- isParagraphBlock (Document _ _ docs) = isParagraphBlock $ last docs
 

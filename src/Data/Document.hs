@@ -31,8 +31,8 @@ mkEnumeration :: [Document] -> Document
 mkEnumeration = Document (0, [], "") Enumeration
 
 
-mkHeading :: [[Document]] -> Document
-mkHeading = Document (0, [], "") Heading . map mkContent
+mkHeading :: [Document] -> Document
+mkHeading = Document (0, [], "") Heading
 
 
 mkItem :: [Document] -> Document
@@ -58,37 +58,7 @@ isEnumeration :: Document -> Bool
 isEnumeration (Document _ Enumeration _) = True
 isEnumeration _ = False
 
+
 isItem :: Document -> Bool
 isItem (Document _ Item _) = True
 isItem _ = False
-
--- instance Show Document where
---     show (Heading _ lns) = "Heading = " ++ show lns
---     show (Paragraph _ txts) = "Paragraph = " ++ show txts
---     show (Content docs) = intercalate "\n" $ map show docs
---     show (Section doc) = "begin\n" ++ show doc ++ "\nend"
---     show (Style _ sty lns) = sty ++ " = " ++ show lns
-    
---     show (Unordered docs) = "Unordered = " ++ intercalate "," (map show docs)
-
-
--- isContent :: Document -> Bool
--- isContent (Content _) = True
--- isContent _ = False
-
-
--- | 'ensureDocument' @docs@ the first elements of @docs@ if @docs@ is
--- a singleton list, otherwise, it returns a 'Content docs'
--- ensureDocument :: [Document] -> Document
--- ensureDocument [doc] = doc
--- ensureDocument docs = Content docs
-
-
--- | 'rangeLoc' @doc@ returns the pair of surrounding 'Srcloc's of
--- @doc@ or its children.
--- rangeloc :: Document -> (Srcloc, Srcloc)
--- rangeloc (Heading loc _) = (loc, loc)
--- rangeloc (Paragraph loc _) = (loc, loc)
--- rangeloc (Content (doc:docs)) = (fst $ rangeloc doc, snd $ rangeloc $ last docs)
--- rangeloc (Section doc) = rangeloc doc
--- rangeloc (Style loc _ _) = (loc, loc)
