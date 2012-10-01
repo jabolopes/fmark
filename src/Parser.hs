@@ -133,14 +133,6 @@ spanify ln | isUnorderedItem ln = mkItem $ reconstruct $ drop 2 ln
 spanify ln = mkContent $ reconstruct ln
 
 
-enumerate :: [Document] -> [Document]
-enumerate [] = []
-enumerate docs@(item:_) | isEnumOrItem item =
-    let (items, docs') = span isEnumOrItem docs in
-    mkEnumeration items:enumerate docs'
-enumerate (doc:docs) = doc:enumerate docs
-
-
 -- Example
 -- > * ...
 -- > Enumeration ...
@@ -178,6 +170,12 @@ blockify locs =
 
           restructure docs | all isEnumOrItem docs = mkEnumeration docs
           restructure docs = mkParagraph $ enumerate docs
+
+          enumerate [] = []
+          enumerate docs@(item:_) | isEnumOrItem item =
+              let (items, docs') = span isEnumOrItem docs in
+              mkEnumeration items:enumerate docs'
+          enumerate (doc:docs) = doc:enumerate docs
           
           -- isParagraphBlock (Document _ (Plain str) _) = isParagraph str
           -- isParagraphBlock (Document _ _ docs) = isParagraphBlock $ last docs
