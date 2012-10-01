@@ -52,3 +52,14 @@ PARAGRAPH and LIST and PARAGRAPH END.
    * that also continues
   but the sublist becomes a section
 * LAST LIST END
+
+
+* a double nested list with a section
+ * this is the first sublist
+
+  * this is the sub-sublist
+
+  * that also continues
+
+ * this is something
+* and this becomes another list
