@@ -180,6 +180,7 @@ blockify locs =
           -- isParagraphBlock (Document _ (Plain str) _) = isParagraph str
           -- isParagraphBlock (Document _ _ docs) = isParagraphBlock $ last docs
 
+
 -- Example
 -- > Item ...
 -- > Enumeration ...
