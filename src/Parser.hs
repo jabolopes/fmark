@@ -2,6 +2,7 @@
 module Parser where
 
 import Control.Monad
+import Data.Functor ((<$>))
 import Data.Char (isPunctuation, isSpace)
 import Data.List (intercalate)
 
@@ -16,11 +17,16 @@ isEmptyLn :: String -> Bool
 isEmptyLn = all isSpace
 
 
--- | 'isParagraph' @str@ decides whether @str@ is a paragraph or a
--- heading.
-isParagraph :: String -> Bool
-isParagraph str = last str `elem` paragraphTerminator
+-- 'isParagraphItemLn' @str@ decides whether @str@ is a paragraph or
+-- a heading.
+isParagraphItemLn :: String -> Bool
+isParagraphItemLn str = last str `elem` paragraphTerminator
     where paragraphTerminator = ".!?"
+
+
+isUnorderedItemLn :: String -> Bool
+isUnorderedItemLn ('*':' ':_) = True
+isUnorderedItemLn _ = False
 
 
 -- | 'section' @idns idn@ is the 'List' of 'BeginSection' and
@@ -112,11 +118,8 @@ reconstruct = reconstruct'
               where (hd, tl) = span (`notElem` "['_") str
 
 
-isUnorderedItem :: String -> Bool
-isUnorderedItem ('*':' ':_) = True
-isUnorderedItem _ = False
-
-isEnumOrItem doc = isEnumeration doc || isItem doc
+isEnumOrItem :: Document -> Bool
+isEnumOrItem = (||) `fmap` isEnumeration `ap` isUnorderedItem
 
 
 -- Example
@@ -129,8 +132,10 @@ isEnumOrItem doc = isEnumeration doc || isItem doc
 --
 -- > Content ...
 spanify :: String -> Document
-spanify ln | isUnorderedItem ln = mkItem $ reconstruct $ drop 2 ln
-spanify ln = mkContent $ reconstruct ln
+spanify ln = mkItem t $ reconstruct ln
+    where t | isUnorderedItemLn ln = UnorderedT
+            | isParagraphItemLn ln = ParagraphT
+            | otherwise = HeadingT
 
 
 -- Example
@@ -169,16 +174,17 @@ blockify locs =
           spanify' (Right doc) = doc
 
           restructure docs | all isEnumOrItem docs = mkEnumeration docs
-          restructure docs = mkParagraph $ enumerate docs
+          restructure docs =
+              let docs' = enumerate docs in
+              case last docs' of
+                doc | isHeadingItem doc -> mkHeading docs'
+                    | otherwise -> mkParagraph docs'
 
           enumerate [] = []
           enumerate docs@(item:_) | isEnumOrItem item =
               let (items, docs') = span isEnumOrItem docs in
               mkEnumeration items:enumerate docs'
           enumerate (doc:docs) = doc:enumerate docs
-
-          -- isParagraphBlock (Document _ (Plain str) _) = isParagraph str
-          -- isParagraphBlock (Document _ _ docs) = isParagraphBlock $ last docs
 
 
 -- Example
@@ -233,18 +239,8 @@ docify tks = fst $ docify' tks [] []
 
           docify' :: [Token] -> [Either Srcloc Document] -> [Document] -> (Document, [Token])
           docify' [] [] docs = (mkContent $ reverse docs, [])
-
-          docify' [] locs docs =
-              reduceEmpty [] locs docs
-
-          docify' (Literal loc:tks) locs docs =
-              shift loc tks locs docs
-
-          docify' (BeginSection:tks) locs docs =
-              pushPop tks locs docs
-
-          docify' (EndSection:tks) locs docs =
-              reduceSection tks locs docs
-
-          docify' (Empty:tks) locs docs =
-              reduceEmpty tks locs docs
+          docify' [] locs docs = reduceEmpty [] locs docs
+          docify' (Literal loc:tks) locs docs = shift loc tks locs docs
+          docify' (BeginSection:tks) locs docs = pushPop tks locs docs
+          docify' (EndSection:tks) locs docs = reduceSection tks locs docs
+          docify' (Empty:tks) locs docs = reduceEmpty tks locs docs

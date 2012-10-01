@@ -6,11 +6,18 @@ import Data.List (intercalate)
 import Data.Token
 
 
+data ItemT
+    = HeadingT
+    | ParagraphT
+    | UnorderedT
+      deriving (Show)
+
+
 data Element
     = Content
     | Enumeration
     | Heading
-    | Item
+    | Item ItemT
     | Paragraph
     | Plain String
     | Section
@@ -35,8 +42,8 @@ mkHeading :: [Document] -> Document
 mkHeading = Document (0, [], "") Heading
 
 
-mkItem :: [Document] -> Document
-mkItem = Document (0, [], "") Item
+mkItem :: ItemT -> [Document] -> Document
+mkItem t = Document (0, [], "") $ Item t
 
 
 mkParagraph :: [Document] -> Document
@@ -50,6 +57,7 @@ mkPlain str = Document (0, [], "") (Plain str) []
 mkSection :: [Document] -> Document
 mkSection = Document (0, [], "") Section
 
+
 mkSpan :: String -> [Document] -> Document
 mkSpan sty docs = Document (0, [], "") (Span sty) docs
 
@@ -59,6 +67,21 @@ isEnumeration (Document _ Enumeration _) = True
 isEnumeration _ = False
 
 
-isItem :: Document -> Bool
-isItem (Document _ Item _) = True
-isItem _ = False
+-- isItem :: Document -> Bool
+-- isItem (Document _ (Item _) _) = True
+-- isItem _ = False
+
+
+isHeadingItem :: Document -> Bool
+isHeadingItem (Document _ (Item HeadingT) _) = True
+isHeadingItem _ = False
+
+
+isParagraphItem :: Document -> Bool
+isParagraphItem (Document _ (Item ParagraphT) _) = True
+isParagraphItem _ = False
+
+
+isUnorderedItem :: Document -> Bool
+isUnorderedItem (Document _ (Item UnorderedT) _) = True
+isUnorderedItem _ = False
