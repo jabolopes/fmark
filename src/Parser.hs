@@ -133,6 +133,7 @@ spanify ln | isUnorderedItem ln = mkItem $ reconstruct $ drop 2 ln
 spanify ln = mkContent $ reconstruct ln
 
 
+enumerate :: [Document] -> [Document]
 enumerate [] = []
 enumerate docs@(item:_) | isEnumOrItem item =
     let (items, docs') = span isEnumOrItem docs in
