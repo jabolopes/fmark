@@ -4,7 +4,7 @@ module Parser where
 import Control.Monad
 import Data.Functor ((<$>))
 import Data.Char (isPunctuation, isSpace)
-import Data.List (intercalate)
+import Data.List (intercalate, isPrefixOf)
 
 import Data.Document
 import Data.Token
@@ -32,13 +32,13 @@ isUnorderedItemLn _ = False
 -- | 'section' @idns idn@ is the 'List' of 'BeginSection' and
 -- 'EndSection' 'Token's issued according the indentation stack @idns@
 -- and current indentation @idn@.
-section :: [Int] -> Int -> [Token]
-section [] _ = error "section: idns is empty"
-section (idn1:idns) idn2 =
+section :: Char -> [Int] -> Int -> [Token]
+section _ [] _ = error "section: idns is empty"
+section c (idn1:idns) idn2 =
     case compare idn1 idn2 of
       EQ -> []
-      LT -> [BeginSection]
-      GT -> EndSection:section (dropWhile (> idn1) idns) idn2
+      LT -> [BeginSection c]
+      GT -> EndSection:section c (dropWhile (> idn1) idns) idn2
 
 
 tokenize :: Int -> [Int] -> String -> Token
@@ -49,8 +49,13 @@ tokenize n idns ln = Literal (n, idns, ln)
 -- holding @ln@ preceeded by the appropriate section 'Token's as
 -- issued by 'section' according to the indentation stack @idns@.
 reduce :: [Int] -> Int -> String -> [Token]
-reduce idns n ln = section idns idn ++ [tokenize n (push idn idns) $ trim ln]
+reduce idns n ln = section '|' idns idn ++ [tokenize n (push idn idns) $ trim ln]
     where idn = indentation ln
+
+
+isBlockStarter :: String -> Bool
+isBlockStarter (c:' ':_) = c `elem` ">|" || isPunctuation c
+isBlockStarter _ = False
 
 
 -- | 'classify' @str@ is the 'List' of 'Token's of @str@.
@@ -60,6 +65,17 @@ classify str = classify' [0] $ zip [1..] $ lines str
           classify' idns [] = replicate (length idns - 1) EndSection
           classify' idns ((_, ln):lns) | isEmptyLn ln = classify' idns lns
           classify' idns [(n, ln)] = reduce idns n ln ++ classify' (push (indentation ln) idns) []
+
+          classify' idns ((n, ln):lns)
+              | isBlockStarter (dropWhile isSpace ln) =
+                  let 
+                      (pre, c:suf) = span isSpace ln
+                      ln' = pre ++ " " ++ suf
+                  in
+                    section '|' idns (indentation ln) ++
+                    section c (push (indentation ln) idns) (indentation ln') ++
+                    classify' (push (indentation ln') idns) ((n, ln'):lns)
+
           classify' idns ((n1, ln1):(n2, ln2):lns)
               | isEmptyLn ln2 =
                   let
@@ -114,12 +130,14 @@ reconstruct = reconstruct'
           reconstruct' ('\'':str) = spanChar '\'' "emphasis" str
           reconstruct' ('_':str) = spanChar '_' "underline" str
           reconstruct' str =
-              mkPlain hd:reconstruct' tl
-              where (hd, tl) = span (`notElem` "['_") str
+              case hd of
+                [] -> error $ "reconstruct': one of the symbols in the last pattern case is not being caught in the previous cases"
+                _ -> mkPlain hd:reconstruct' tl
+              where (hd, tl) = span (`notElem` "'_") str
 
 
 isEnumOrUnorderedItem :: Document -> Bool
-isEnumOrUnorderedItem = (||) `fmap` isEnumeration `ap` isUnorderedItem
+isEnumOrUnorderedItem doc = isEnumeration doc || isUnorderedItem doc
 
 
 -- Example
@@ -232,6 +250,6 @@ docify tks = fst $ docify' tks [] []
           docify' [] [] docs = (mkContent $ reverse docs, [])
           docify' [] locs docs = reduceEmpty [] locs docs
           docify' (Literal loc:tks) locs docs = shift loc tks locs docs
-          docify' (BeginSection:tks) locs docs = pushPop tks locs docs
+          docify' (BeginSection _:tks) locs docs = pushPop tks locs docs
           docify' (EndSection:tks) locs docs = reduceSection tks locs docs
           docify' (Empty:tks) locs docs = reduceEmpty tks locs docs
