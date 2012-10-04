@@ -1,20 +1,8 @@
 {-# LANGUAGE BangPatterns #-}
 module Parser where
 
-import Control.Monad
-import Data.Functor ((<$>))
-import Data.Char (isPunctuation, isSpace)
-import Data.List (intercalate, isPrefixOf)
-
 import Data.Document
 import Data.Token
-import Utils
-
-import Debug.Trace
-
-
-isEmptyLn :: String -> Bool
-isEmptyLn = all isSpace
 
 
 -- 'isParagraphItemLn' @str@ decides whether @str@ is a paragraph or
@@ -29,115 +17,68 @@ isUnorderedItemLn ('*':' ':_) = True
 isUnorderedItemLn _ = False
 
 
--- | 'section' @idns idn@ is the 'List' of 'BeginSection' and
--- 'EndSection' 'Token's issued according the indentation stack @idns@
--- and current indentation @idn@.
-section :: Char -> [Int] -> Int -> [Token]
-section _ [] _ = error "section: idns is empty"
-section c (idn1:idns) idn2 =
-    case compare idn1 idn2 of
-      EQ -> []
-      LT -> [BeginSection c]
-      GT -> EndSection:section c (dropWhile (> idn1) idns) idn2
-
-
-tokenize :: Int -> [Int] -> String -> Token
-tokenize n idns ln = Literal (n, idns, ln)
-
-
--- 'reduce' @idns ln@ is the 'List' containing the 'Literal' 'Token'
--- holding @ln@ preceeded by the appropriate section 'Token's as
--- issued by 'section' according to the indentation stack @idns@.
-reduce :: [Int] -> Int -> String -> [Token]
-reduce idns n ln = section '|' idns idn ++ [tokenize n (push idn idns) $ trim ln]
-    where idn = indentation ln
-
-
-isBlockStarter :: String -> Bool
-isBlockStarter (c:' ':_) = c `elem` ">|" || isPunctuation c
-isBlockStarter _ = False
-
-
--- | 'classify' @str@ is the 'List' of 'Token's of @str@.
-classify :: String -> [Token]
-classify str = classify' [0] $ zip [1..] $ lines str
-    where classify' :: [Int] -> [(Int, String)] -> [Token]
-          classify' idns [] = replicate (length idns - 1) EndSection
-          classify' idns ((_, ln):lns) | isEmptyLn ln = classify' idns lns
-          classify' idns [(n, ln)] = reduce idns n ln ++ classify' (push (indentation ln) idns) []
-
-          classify' idns ((n, ln):lns)
-              | isBlockStarter (dropWhile isSpace ln) =
-                  let 
-                      (pre, c:suf) = span isSpace ln
-                      ln' = pre ++ " " ++ suf
-                  in
-                    section '|' idns (indentation ln) ++
-                    section c (push (indentation ln) idns) (indentation ln') ++
-                    classify' (push (indentation ln') idns) ((n, ln'):lns)
-
-          classify' idns ((n1, ln1):(n2, ln2):lns)
-              | isEmptyLn ln2 =
-                  let
-                      ln1' = reduce idns n1 ln1
-                      lns' = classify' (push idn1 idns) lns
-                  in
-                    case lns' of
-                      [] -> ln1'
-                      EndSection:lns'' -> ln1' ++ [EndSection, Empty] ++ lns''
-                      _ -> ln1' ++ [Empty] ++ lns'
-              | idn1 < idn2 = reduce idns n1 ln1 ++ classify' (push idn1 idns) ((n2, ln2):lns)
-              | idn1 > idn2 = reduce idns n1 ln1 ++ classify' (push idn1 idns) ((n2, ln2):lns)
-              | otherwise = reduce idns n1 ln1 ++ classify' (push idn2 idns) ((n2, ln2):lns)
-              where idn1 = indentation ln1
-                    idn2 = indentation ln2
+isEnumOrUnorderedItem :: Document -> Bool
+isEnumOrUnorderedItem doc = isEnumeration doc || isUnorderedItem doc
 
 
 -- 'reconstruct' @str@ produces the 'List' of 'Text' elements
 -- for 'String' @str@.
 reconstruct :: String -> [Document]
-reconstruct = reconstruct'
-    where block sty = "[" ++ sty ++ " "
+reconstruct = reconstructFirst
+    where spanChar c sty str =
+              case span' str of
+                (hd, tl, True) -> mkSpan sty [mkPlain hd]:reconstructTail tl
+                (hd, tl, _) -> [mkPlain (c:hd)]
+              where span' str =
+                        case span (/= c) str of
+                          (hd, []) -> (hd, "", False)
+                          (hd, [c']) | c == c' -> (hd, "", True)
+                          (hd, c':' ':tl) | c == c' -> (hd, ' ':tl, True)
+                          -- info: '_' has to be equal to 'c'
+                          (hd, _:tl) -> let (hd', tl', b) = span' tl in
+                                        (hd ++ [c] ++ hd', tl', b)
+
+          spanStarters = "'_"
+          spanStyle '\'' = "emphasis"
+          spanStyle '_' = "underline"
+
+          plain str =
+              case span (/= ' ') str of
+                ([], c:tl) -> mkPlain [c]:reconstructTail tl
+                (hd, tl) -> mkPlain hd:reconstructTail tl
+
+          reconstructFirst "" = []
+          reconstructFirst (c:str) | c `elem` spanStarters = spanChar c (spanStyle c) str
+          reconstructFirst str = plain str
+
+          reconstructTail "" = []
+          reconstructTail (' ':str) = mkPlain " ":reconstructFirst str
+          reconstructTail str = plain str
+
+
+          -- block sty = "[" ++ sty ++ " "
 
           -- mkText c fn str =
           --     case span (/= c) str of
           --       (hd, []) -> [Plain hd]
-          --       (hd, _:tl) -> fn hd:reconstruct' tl
-
-          spanChar :: Char -> String -> String -> [Document]
-          spanChar c sty str =
-              case span (/= c) str of
-                (hd, []) -> [mkPlain hd]
-                (hd, _:tl) -> mkSpan sty [mkPlain hd]:reconstruct' tl
+          --       (hd, _:tl) -> fn hd:reconstructTail tl
 
           -- isSpan sty str = take (length (block sty)) str == (block sty)
 
           -- mkSpanElement sty str =
           --     case span (/= ']') (drop (length (block sty)) str) of
           --       (hd, []) -> [mkPlain hd]
-          --       (hd, _:tl) -> mkSpan sty (reconstruct' hd):reconstruct' tl
+          --       (hd, _:tl) -> mkSpan sty (reconstructTail hd):reconstructTail tl
 
 
-          reconstruct' :: String -> [Document]
-          reconstruct' "" = []
-          -- reconstruct' str | isSpan "bold" str = mkSpanElement "bold" str
+          -- reconstructTail str | isSpan "bold" str = mkSpanElement "bold" str
           --                 | isSpan "italic" str = mkSpanElement "italic" str
           --                 | isSpan "underline" str = mkSpanElement "underline" str
           --                 | isSpan "footnote" str = mkSpanElement "footnote" str
           --                 | isSpan "cite" str = mkSpanElement "cite" str
-          -- reconstruct' ('[':str) = mkText ']' Ref str
+          -- reconstructTail ('[':str) = mkText ']' Ref str
           -- edit: don't capture quotes in words, e.g., "don't" and "can't"
-          reconstruct' ('\'':str) = spanChar '\'' "emphasis" str
-          reconstruct' ('_':str) = spanChar '_' "underline" str
-          reconstruct' str =
-              case hd of
-                [] -> error $ "reconstruct': one of the symbols in the last pattern case is not being caught in the previous cases"
-                _ -> mkPlain hd:reconstruct' tl
-              where (hd, tl) = span (`notElem` "'_") str
-
-
-isEnumOrUnorderedItem :: Document -> Bool
-isEnumOrUnorderedItem doc = isEnumeration doc || isUnorderedItem doc
+          -- reconstructTail ('\'':str) = spanChar '\'' "emphasis" str
 
 
 -- Example
@@ -170,8 +111,7 @@ isEnumOrUnorderedItem doc = isEnumeration doc || isUnorderedItem doc
 -- >   Enumeration ...
 -- >  Content ...
 blockify :: [Either Srcloc Document] -> Document
-blockify locs =
-    restructure $ map spanifyEither locs
+blockify locs = restructure $ map spanifyEither locs
     where spanify ln | isUnorderedItemLn ln = mkItem UnorderedT $ reconstruct $ drop 2 ln
                      | isHeadingItemLn ln = mkItem HeadingT $ reconstruct ln
                      | otherwise = mkItem ParagraphT $ reconstruct ln
@@ -179,16 +119,17 @@ blockify locs =
           spanifyEither (Left (_, _, str)) = spanify str
           spanifyEither (Right doc) = doc
 
-          restructure [doc] | isSection doc || isEnumeration doc = doc
-          restructure docs | all isEnumOrUnorderedItem docs = mkEnumeration docs
-          restructure docs | all isHeadingItem docs = mkHeading docs
-          restructure docs = mkParagraph $ enumerate docs
-
           enumerate [] = []
           enumerate docs@(item:_) | isEnumOrUnorderedItem item =
               let (items, docs') = span isEnumOrUnorderedItem docs in
               mkEnumeration items:enumerate docs'
           enumerate (doc:docs) = doc:enumerate docs
+
+          -- restructure [doc] | isSection doc || isEnumeration doc = doc
+          restructure [doc] | isBlock doc || isEnumeration doc = doc
+          restructure docs | all isEnumOrUnorderedItem docs = mkEnumeration docs
+          restructure docs | all isHeadingItem docs = mkHeading docs
+          restructure docs = mkParagraph $ enumerate docs
 
 
 -- Example
@@ -214,42 +155,47 @@ blockify locs =
 -- >   Item ...
 -- >   Enumeration ...
 -- >  ...
-sectionify [doc] | isEnumeration doc = doc
-sectionify docs | all isEnumOrUnorderedItem docs && any isUnorderedItem docs = mkEnumeration docs
-sectionify docs = mkSection docs
+sectionify _ [doc] | isEnumeration doc = doc
+sectionify _ docs | all isEnumOrUnorderedItem docs && any isUnorderedItem docs = mkEnumeration docs
+sectionify sty docs = mkBlock sty docs
 
 
 -- | 'docify' @tks@ parses the sequence of 'Token's @tks@ into a 'Document'.
 docify :: [Token] -> Document
-docify tks = fst $ docify' tks [] []
+docify tks = fst $ docify' "section" tks [] []
     where 
-          shift :: Srcloc -> [Token] -> [Either Srcloc Document] -> [Document] -> (Document, [Token])
-          shift loc tks locs docs =
-              docify' tks (Left loc:locs) docs
+          shift :: String -> Srcloc -> [Token] -> [Either Srcloc Document] -> [Document] -> (Document, [Token])
+          shift sty loc tks locs docs =
+              docify' sty tks (Left loc:locs) docs
 
 
-          pushPop :: [Token] -> [Either Srcloc Document] -> [Document] -> (Document, [Token])
-          pushPop tks locs docs =
-              let (doc, tks') = docify' tks [] [] in
-              docify' tks' (Right doc:locs) docs
-
-          
-          reduceEmpty :: [Token] -> [Either Srcloc Document] -> [Document] -> (Document, [Token])
-          reduceEmpty tks locs docs =
-              let doc = blockify $ reverse locs in
-              docify' tks [] (doc:docs)
+          pushPop :: String -> [Token] -> [Either Srcloc Document] -> [Document] -> (Document, [Token])
+          pushPop sty tks locs docs =
+              let (doc, tks') = docify' sty tks [] [] in
+              docify' sty tks' (Right doc:locs) docs
 
           
-          reduceSection :: [Token] -> [Either Srcloc Document] -> [Document] -> (Document, [Token])
-          reduceSection tks locs docs =
+          reduceEmpty :: String -> [Token] -> [Either Srcloc Document] -> [Document] -> (Document, [Token])
+          reduceEmpty sty tks locs docs =
               let doc = blockify $ reverse locs in
-              (sectionify $ reverse $ doc:docs, tks)
+              docify' sty tks [] (doc:docs)
+
+          
+          reduceSection :: String -> [Token] -> [Either Srcloc Document] -> [Document] -> (Document, [Token])
+          reduceSection sty tks locs docs =
+              let doc = blockify $ reverse locs in
+              (sectionify sty $ reverse $ doc:docs, tks)
 
 
-          docify' :: [Token] -> [Either Srcloc Document] -> [Document] -> (Document, [Token])
-          docify' [] [] docs = (mkContent $ reverse docs, [])
-          docify' [] locs docs = reduceEmpty [] locs docs
-          docify' (Literal loc:tks) locs docs = shift loc tks locs docs
-          docify' (BeginSection _:tks) locs docs = pushPop tks locs docs
-          docify' (EndSection:tks) locs docs = reduceSection tks locs docs
-          docify' (Empty:tks) locs docs = reduceEmpty tks locs docs
+          sectionT '"' = "quotation"
+          sectionT '|' = "section"
+          sectionT '>' = "verbatim"
+          sectionT c = show c
+
+          docify' :: String -> [Token] -> [Either Srcloc Document] -> [Document] -> (Document, [Token])
+          docify' _ [] [] docs = (mkContent $ reverse docs, [])
+          docify' sty [] locs docs = reduceEmpty sty [] locs docs
+          docify' sty (Literal loc:tks) locs docs = shift sty loc tks locs docs
+          docify' _ (BeginSection t:tks) locs docs = pushPop (sectionT t) tks locs docs
+          docify' sty (EndSection:tks) locs docs = reduceSection sty tks locs docs
+          docify' sty (Empty:tks) locs docs = reduceEmpty sty tks locs docs

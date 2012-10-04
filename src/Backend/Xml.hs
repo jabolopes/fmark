@@ -123,15 +123,15 @@ docToXml :: Maybe Document -> Document -> String
 docToXml _ doc =
     intercalate "\n" ["<xml>", evalState (docToXml' doc) (XmlState 2 True), "</xml>"]
     where elementTag :: Element -> ([XmlM String] -> XmlM String)
+          elementTag (Block sty) = xmlLongTags sty []
           elementTag Content = tag "content" []
           elementTag Enumeration = xmlLongTags "enumeration" []
           elementTag Heading = xmlLongTags "heading" []
           elementTag (Item _) = xmlShortTags "item" []
           elementTag Paragraph = tag "paragraph" []
           elementTag (Plain str) = const $ xmlStr $ return str
-          elementTag Section = xmlLongTags "section" []
+          --elementTag Section = xmlLongTags "section" []
           elementTag (Span sty) = tag sty []
-          elementTag (Style sty) = xmlLongTags sty []
 
           docToXml' :: Document -> XmlM String
           docToXml' (Document _ el docs) =

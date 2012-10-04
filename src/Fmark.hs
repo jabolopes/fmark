@@ -14,6 +14,7 @@ import System.Process
 import Backend.Xml
 import Data.Document
 import Data.Token
+import Lexer
 import Parser
 import Utils
 --import Weaver
