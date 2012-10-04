@@ -35,7 +35,8 @@ reduce idns n ln = section '|' idns idn ++ [tokenize n (push idn idns) $ trim ln
 
 
 isBlockStarter :: String -> Bool
-isBlockStarter (c:' ':_) = c `notElem` "*" && (c `elem` ">|" || isPunctuation c)
+-- isBlockStarter (c:' ':_) = c `notElem` "*" && (c `elem` ">|" || isPunctuation c)
+isBlockStarter (c:' ':_) = c `elem` ">|" || isPunctuation c
 isBlockStarter _ = False
 
 
@@ -44,18 +45,23 @@ classify :: String -> [Token]
 classify str = classify' [0] $ zip [1..] $ lines str
     where classify' :: [Int] -> [(Int, String)] -> [Token]
           classify' idns [] = replicate (length idns - 1) EndSection
-          classify' idns ((_, ln):lns) | isEmptyLn ln = classify' idns lns
-          classify' idns [(n, ln)] = reduce idns n ln ++ classify' (push (indentation ln) idns) []
 
           classify' idns ((n, ln):lns)
+              | isEmptyLn ln = classify' idns lns
               | isBlockStarter (dropWhile isSpace ln) =
                   let 
                       (pre, c:suf) = span isSpace ln
                       ln' = pre ++ " " ++ suf
+                      s1 = section '|' idns $ indentation ln
+                      s2 = section c (push (indentation ln) idns) $ indentation ln'
+                      lns' = classify' (push (indentation ln') idns) $ (n, ln'):lns
                   in
-                    section '|' idns (indentation ln) ++
-                    section c (push (indentation ln) idns) (indentation ln') ++
-                    classify' (push (indentation ln') idns) ((n, ln'):lns)
+                    case lns' of
+                      [] -> s1 ++ s2 ++ lns'
+                      _ -> s1 ++ s2 ++ lns'
+
+          classify' idns [(n, ln)] =
+              reduce idns n ln ++ classify' (push (indentation ln) idns) []
 
           classify' idns ((n1, ln1):(n2, ln2):lns)
               | isEmptyLn ln2 =
@@ -65,6 +71,7 @@ classify str = classify' [0] $ zip [1..] $ lines str
                   in
                     case lns' of
                       [] -> ln1'
+                      [EndSection] -> ln1' ++ [EndSection]
                       EndSection:lns'' -> ln1' ++ [EndSection, Empty] ++ lns''
                       _ -> ln1' ++ [Empty] ++ lns'
               | idn1 < idn2 = reduce idns n1 ln1 ++ classify' (push idn1 idns) ((n2, ln2):lns)
