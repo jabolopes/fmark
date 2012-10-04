@@ -155,7 +155,8 @@ blockify locs = restructure $ map spanifyEither locs
 -- >   Item ...
 -- >   Enumeration ...
 -- >  ...
-sectionify _ [doc] | isEnumeration doc = doc
+-- sectionify _ [doc] | isBlock doc || isEnumeration doc = doc
+sectionify _ [doc] = error $ "sectionify: single element"
 sectionify _ docs | all isEnumOrUnorderedItem docs && any isUnorderedItem docs = mkEnumeration docs
 sectionify sty docs = mkBlock sty docs
 
@@ -169,10 +170,10 @@ docify tks = fst $ docify' "section" tks [] []
               docify' sty tks (Left loc:locs) docs
 
 
-          pushPop :: String -> [Token] -> [Either Srcloc Document] -> [Document] -> (Document, [Token])
-          pushPop sty tks locs docs =
-              let (doc, tks') = docify' sty tks [] [] in
-              docify' sty tks' (Right doc:locs) docs
+          pushPop :: String -> String -> [Token] -> [Either Srcloc Document] -> [Document] -> (Document, [Token])
+          pushPop sty1 sty2 tks locs docs =
+              let (doc, tks') = docify' sty2 tks [] [] in
+              docify' sty1 tks' (Right doc:locs) docs
 
           
           reduceEmpty :: String -> [Token] -> [Either Srcloc Document] -> [Document] -> (Document, [Token])
@@ -183,8 +184,12 @@ docify tks = fst $ docify' "section" tks [] []
           
           reduceSection :: String -> [Token] -> [Either Srcloc Document] -> [Document] -> (Document, [Token])
           reduceSection sty tks locs docs =
-              let doc = blockify $ reverse locs in
-              (sectionify sty $ reverse $ doc:docs, tks)
+              let
+                  doc = blockify $ reverse locs
+                  docs' | null docs = doc
+                        | otherwise = sectionify sty $ reverse $ doc:docs
+              in
+                (docs', tks)
 
 
           sectionT '"' = "quotation"
@@ -196,6 +201,6 @@ docify tks = fst $ docify' "section" tks [] []
           docify' _ [] [] docs = (mkContent $ reverse docs, [])
           docify' sty [] locs docs = reduceEmpty sty [] locs docs
           docify' sty (Literal loc:tks) locs docs = shift sty loc tks locs docs
-          docify' _ (BeginSection t:tks) locs docs = pushPop (sectionT t) tks locs docs
+          docify' sty (BeginSection t:tks) locs docs = pushPop sty (sectionT t) tks locs docs
           docify' sty (EndSection:tks) locs docs = reduceSection sty tks locs docs
           docify' sty (Empty:tks) locs docs = reduceEmpty sty tks locs docs
