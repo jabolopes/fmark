@@ -141,14 +141,8 @@ spanify lns
     | otherwise = mkParagraph $ reconstruct $ intercalate " " lns
 
 
-blockify :: [Either Srcloc Document] -> Document
-blockify locs =
-    case spanLocs locs of
-      [doc] -> doc
-      -- docs | all isItemBlock docs -> Document (0, [], "") Enumeration docs
-      -- docs | all (either (isHeadingItemLn . snd) (const False)) locs -> mkHeading docs
-      -- docs | otherwise -> mkParagraph locs
-      docs -> mkContent docs
+blockify :: [Either Srcloc Document] -> [Document]
+blockify locs = spanLocs locs
     where spanLocs [] = []
           spanLocs es@(Left loc:_) =
               let (locs', docs) = span (either (const True) (const False)) es in
@@ -176,14 +170,14 @@ docify tks = fst $ docify' SectionT tks [] []
           
           reduceEmpty :: BlockT -> [Token] -> [Either Srcloc Document] -> [Document] -> (Document, [Token])
           reduceEmpty sty tks locs docs =
-              let doc = blockify $ reverse locs in
-              docify' sty tks [] (doc:docs)
+              let docs' = blockify $ reverse locs in
+              docify' sty tks [] (reverse docs' ++ docs)
 
           
           reduceSection :: BlockT -> [Token] -> [Either Srcloc Document] -> [Document] -> (Document, [Token])
           reduceSection sty tks locs docs =
-              let doc = blockify $ reverse locs in
-              (mkBlock sty $ reverse $ doc:docs, tks)
+              let docs' = blockify $ reverse locs in
+              (mkBlock sty $ reverse docs ++ docs', tks)
 
 
           sectionT '*' = ItemT

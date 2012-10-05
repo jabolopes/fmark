@@ -130,7 +130,7 @@ docToXml _ doc =
           elementTag Paragraph = xmlShortTags "paragraph" []
           elementTag (Plain str) = const $ xmlStr $ return str
           --elementTag Section = xmlLongTags "section" []
-          elementTag (Span sty) = tag sty []
+          elementTag (Span sty) = xmlShortTags sty []
 
           docToXml' :: Document -> XmlM String
           docToXml' (Document _ el docs) =
