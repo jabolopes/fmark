@@ -3,22 +3,27 @@ module Data.Document where
 import Data.Token (Srcloc)
 
 
-data ItemT
-    = HeadingT
-    | ParagraphT
-    | UnorderedT
-      deriving (Eq, Show)
+data BlockT
+    = ItemT
+    | QuotationT
+    | SectionT
+    | VerbatimT
+      deriving (Eq)
+
+instance Show BlockT where
+    show ItemT = "item"
+    show QuotationT = "quotation"
+    show SectionT = "section"
+    show VerbatimT = "verbatim"
 
 
 data Element
-    = Block String
+    = Block BlockT
     | Content
     | Enumeration
     | Heading
-    | Item ItemT
     | Paragraph
     | Plain String
---    | Section
     | Span String
       deriving (Eq, Show)
 
@@ -30,8 +35,8 @@ data Document = Document Srcloc Element [Document]
 mkDocument = Document (0, [], "")
 
 
-mkBlock :: String -> [Document] -> Document
-mkBlock sty docs = Document (0, [], "") (Block sty) docs
+mkBlock :: BlockT -> [Document] -> Document
+mkBlock t docs = Document (0, [], "") (Block t) docs
 
 
 mkContent :: [Document] -> Document
@@ -44,10 +49,6 @@ mkEnumeration = Document (0, [], "") Enumeration
 
 mkHeading :: [Document] -> Document
 mkHeading = Document (0, [], "") Heading
-
-
-mkItem :: ItemT -> [Document] -> Document
-mkItem t = Document (0, [], "") $ Item t
 
 
 mkParagraph :: [Document] -> Document
@@ -73,19 +74,3 @@ isDocument t1 (Document _ t2 _) = t1 == t2
 isBlock :: Document -> Bool
 isBlock (Document _ (Block _) _) = True
 isBlock _ = False
-
-
-isEnumeration :: Document -> Bool
-isEnumeration = isDocument Enumeration
-
-
-isHeadingItem :: Document -> Bool
-isHeadingItem = isDocument (Item HeadingT)
-
-
-isParagraphItem :: Document -> Bool
-isParagraphItem = isDocument (Item ParagraphT)
-
-
-isUnorderedItem :: Document -> Bool
-isUnorderedItem = isDocument (Item UnorderedT)

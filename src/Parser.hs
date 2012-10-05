@@ -1,24 +1,22 @@
 {-# LANGUAGE BangPatterns #-}
 module Parser where
 
+import Data.List (intercalate)
+
 import Data.Document
 import Data.Token
 
 
 -- 'isParagraphItemLn' @str@ decides whether @str@ is a paragraph or
 -- a heading.
-isHeadingItemLn :: String -> Bool
-isHeadingItemLn str = last str `notElem` paragraphTerminator
+isHeadingLn :: String -> Bool
+isHeadingLn str = last str `notElem` paragraphTerminator
     where paragraphTerminator = ".!?"
 
 
 isUnorderedItemLn :: String -> Bool
 isUnorderedItemLn ('*':' ':_) = True
 isUnorderedItemLn _ = False
-
-
-isEnumOrUnorderedItem :: Document -> Bool
-isEnumOrUnorderedItem doc = isEnumeration doc || isUnorderedItem doc
 
 
 -- 'reconstruct' @str@ produces the 'List' of 'Text' elements
@@ -110,94 +108,90 @@ reconstruct = reconstructFirst
 -- >   Item ...
 -- >   Enumeration ...
 -- >  Content ...
+-- blockify :: [Either Srcloc Document] -> Document
+-- blockify locs = restructure $ map spanifyEither locs
+--     where spanify ln | isUnorderedItemLn ln = mkItem UnorderedT $ reconstruct $ drop 2 ln
+--                      | isHeadingItemLn ln = mkItem HeadingT $ reconstruct ln
+--                      | otherwise = mkItem ParagraphT $ reconstruct ln
+
+--           spanifyEither (Left (_, _, str)) = spanify str
+--           spanifyEither (Right doc) = doc
+
+--           enumerate [] = []
+--           enumerate docs@(item:_) | isEnumOrUnorderedItem item =
+--               let (items, docs') = span isEnumOrUnorderedItem docs in
+--               mkEnumeration items:enumerate docs'
+--           enumerate (doc:docs) = doc:enumerate docs
+
+--           -- restructure [doc] | isSection doc || isEnumeration doc = doc
+--           restructure [doc] | isBlock doc || isEnumeration doc = doc
+--           restructure docs | all isEnumOrUnorderedItem docs = mkEnumeration docs
+--           restructure docs | all isHeadingItem docs = mkHeading docs
+--           restructure docs = mkParagraph $ enumerate docs
+
+
+isItemBlock :: Document -> Bool
+isItemBlock (Document _ (Block ItemT) _) = True
+isItemBlock _ = False
+
+
+spanify :: [String] -> Document
+spanify lns
+    | all isHeadingLn lns = mkHeading $ map (Document (0, [], "") (Span "line") . reconstruct) lns
+    | otherwise = mkParagraph $ reconstruct $ intercalate " " lns
+
+
 blockify :: [Either Srcloc Document] -> Document
-blockify locs = restructure $ map spanifyEither locs
-    where spanify ln | isUnorderedItemLn ln = mkItem UnorderedT $ reconstruct $ drop 2 ln
-                     | isHeadingItemLn ln = mkItem HeadingT $ reconstruct ln
-                     | otherwise = mkItem ParagraphT $ reconstruct ln
-
-          spanifyEither (Left (_, _, str)) = spanify str
-          spanifyEither (Right doc) = doc
-
-          enumerate [] = []
-          enumerate docs@(item:_) | isEnumOrUnorderedItem item =
-              let (items, docs') = span isEnumOrUnorderedItem docs in
-              mkEnumeration items:enumerate docs'
-          enumerate (doc:docs) = doc:enumerate docs
-
-          -- restructure [doc] | isSection doc || isEnumeration doc = doc
-          restructure [doc] | isBlock doc || isEnumeration doc = doc
-          restructure docs | all isEnumOrUnorderedItem docs = mkEnumeration docs
-          restructure docs | all isHeadingItem docs = mkHeading docs
-          restructure docs = mkParagraph $ enumerate docs
-
-
--- Example
--- > Enumeration
--- >
--- > Enumeration
---
--- Example
--- > Item ...
--- > Enumeration ...
---
--- > Enumeration
--- >  Item ...
--- >  Enumeration ...
---
--- Example
--- > Item ...
--- > Enumeration ...
--- > ...
--- >
--- > Section
--- >  Enumeration
--- >   Item ...
--- >   Enumeration ...
--- >  ...
--- sectionify _ [doc] | isBlock doc || isEnumeration doc = doc
-sectionify _ [doc] = error $ "sectionify: single element"
-sectionify _ docs | all isEnumOrUnorderedItem docs && any isUnorderedItem docs = mkEnumeration docs
-sectionify sty docs = mkBlock sty docs
+blockify locs =
+    case spanLocs locs of
+      [doc] -> doc
+      -- docs | all isItemBlock docs -> Document (0, [], "") Enumeration docs
+      -- docs | all (either (isHeadingItemLn . snd) (const False)) locs -> mkHeading docs
+      -- docs | otherwise -> mkParagraph locs
+      docs -> mkContent docs
+    where spanLocs [] = []
+          spanLocs es@(Left loc:_) =
+              let (locs', docs) = span (either (const True) (const False)) es in
+              spanify (map (\(Left (_, _, str)) -> str) locs'):spanLocs docs
+          spanLocs es@(Right doc:_) | isItemBlock doc =
+              let (items, locs) = span (either (const False) isItemBlock) es in
+              mkEnumeration (map (\(Right doc) -> doc) items):spanLocs locs
+          spanLocs (Right doc:docs) = doc:spanLocs docs
 
 
 -- | 'docify' @tks@ parses the sequence of 'Token's @tks@ into a 'Document'.
 docify :: [Token] -> Document
-docify tks = fst $ docify' "section" tks [] []
+docify tks = fst $ docify' SectionT tks [] []
     where 
-          shift :: String -> Srcloc -> [Token] -> [Either Srcloc Document] -> [Document] -> (Document, [Token])
+          shift :: BlockT -> Srcloc -> [Token] -> [Either Srcloc Document] -> [Document] -> (Document, [Token])
           shift sty loc tks locs docs =
               docify' sty tks (Left loc:locs) docs
 
 
-          pushPop :: String -> String -> [Token] -> [Either Srcloc Document] -> [Document] -> (Document, [Token])
+          pushPop :: BlockT -> BlockT -> [Token] -> [Either Srcloc Document] -> [Document] -> (Document, [Token])
           pushPop sty1 sty2 tks locs docs =
               let (doc, tks') = docify' sty2 tks [] [] in
               docify' sty1 tks' (Right doc:locs) docs
 
           
-          reduceEmpty :: String -> [Token] -> [Either Srcloc Document] -> [Document] -> (Document, [Token])
+          reduceEmpty :: BlockT -> [Token] -> [Either Srcloc Document] -> [Document] -> (Document, [Token])
           reduceEmpty sty tks locs docs =
               let doc = blockify $ reverse locs in
               docify' sty tks [] (doc:docs)
 
           
-          reduceSection :: String -> [Token] -> [Either Srcloc Document] -> [Document] -> (Document, [Token])
+          reduceSection :: BlockT -> [Token] -> [Either Srcloc Document] -> [Document] -> (Document, [Token])
           reduceSection sty tks locs docs =
-              let
-                  doc = blockify $ reverse locs
-                  docs' | null docs = doc
-                        | otherwise = sectionify sty $ reverse $ doc:docs
-              in
-                (docs', tks)
+              let doc = blockify $ reverse locs in
+              (mkBlock sty $ reverse $ doc:docs, tks)
 
 
-          sectionT '"' = "quotation"
-          sectionT '|' = "section"
-          sectionT '>' = "verbatim"
-          sectionT c = show c
+          sectionT '*' = ItemT
+          sectionT '"' = QuotationT
+          sectionT '|' = SectionT
+          sectionT '>' = VerbatimT
 
-          docify' :: String -> [Token] -> [Either Srcloc Document] -> [Document] -> (Document, [Token])
+          docify' :: BlockT -> [Token] -> [Either Srcloc Document] -> [Document] -> (Document, [Token])
           docify' _ [] [] docs = (mkContent $ reverse docs, [])
           docify' sty [] locs docs = reduceEmpty sty [] locs docs
           docify' sty (Literal loc:tks) locs docs = shift sty loc tks locs docs
