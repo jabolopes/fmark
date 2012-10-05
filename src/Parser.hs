@@ -79,78 +79,79 @@ reconstruct = reconstructFirst
           -- reconstructTail ('\'':str) = spanChar '\'' "emphasis" str
 
 
--- Example
--- > * ...
--- > Enumeration ...
---
--- > Enumeration
--- >  Item ...
--- >  Enumeration ...
---
--- Example
--- > * ...
--- > Enumeration ...
--- > ... .
--- >
--- > Paragraph
--- >  Enumeration
--- >   Item ...
--- >   Enumeration ...
--- >  Content ... .
---
--- Example
--- > * ...
--- > Enumeration ...
--- > ...
--- >
--- > Heading
--- >  Enumeration
--- >   Item ...
--- >   Enumeration ...
--- >  Content ...
--- blockify :: [Either Srcloc Document] -> Document
--- blockify locs = restructure $ map spanifyEither locs
---     where spanify ln | isUnorderedItemLn ln = mkItem UnorderedT $ reconstruct $ drop 2 ln
---                      | isHeadingItemLn ln = mkItem HeadingT $ reconstruct ln
---                      | otherwise = mkItem ParagraphT $ reconstruct ln
-
---           spanifyEither (Left (_, _, str)) = spanify str
---           spanifyEither (Right doc) = doc
-
---           enumerate [] = []
---           enumerate docs@(item:_) | isEnumOrUnorderedItem item =
---               let (items, docs') = span isEnumOrUnorderedItem docs in
---               mkEnumeration items:enumerate docs'
---           enumerate (doc:docs) = doc:enumerate docs
-
---           -- restructure [doc] | isSection doc || isEnumeration doc = doc
---           restructure [doc] | isBlock doc || isEnumeration doc = doc
---           restructure docs | all isEnumOrUnorderedItem docs = mkEnumeration docs
---           restructure docs | all isHeadingItem docs = mkHeading docs
---           restructure docs = mkParagraph $ enumerate docs
-
-
 isItemBlock :: Document -> Bool
 isItemBlock (Document _ (Block ItemT) _) = True
 isItemBlock _ = False
 
 
+-- Example
+-- > string1 ...
+-- > string2 ...
+--
+-- > Heading
+-- >  Doc (string1 ...)
+-- >  Doc (string2 ...)
+--
+-- Example
+-- > string1 ...
+-- > string2 ... '.'
+--
+-- > Paragraph
+-- >  Doc (string1 ... ' ' string2 ... '.')
 spanify :: [String] -> Document
 spanify lns
     | all isHeadingLn lns = mkHeading $ map (Document (0, [], "") (Span "line") . reconstruct) lns
     | otherwise = mkParagraph $ reconstruct $ intercalate " " lns
 
 
+-- Example
+-- > string1 ...
+-- > string2 ...
+-- >
+-- > string3 ...
+-- > string4 ... '.'
+--
+-- > Heading
+-- >  Doc (string1 ...)
+-- >  Doc (string2 ...)
+-- > Paragraph
+-- >  Doc (string3 ... ' ' string4 ... '.')
+--
+-- Example
+-- > string1 ...
+-- > string2 ...
+-- > Block ItemT
+-- >  string3 ...
+-- >  string4 ...
+-- >
+-- >  string5 ...
+-- >  string6 ... '.'
+-- > Block ItemT
+-- >  string7 ...
+-- >  string8 ... '.'
+--
+-- > Heading
+-- >  Doc (string1 ...)
+-- >  Doc (string2 ...)
+-- > Enumeration
+-- >  Block ItemT
+-- >   Heading
+-- >    Doc (string3 ...)
+-- >    Doc (string4 ...)
+-- >   Paragraph
+-- >    Doc (string5 ... ' ' string6 ... '.')
+-- >  Block ItemT
+-- >   Paragraph
+-- >    Doc (string7 ... ' ' string8 ... '.')
 blockify :: [Either Srcloc Document] -> [Document]
-blockify locs = spanLocs locs
-    where spanLocs [] = []
-          spanLocs es@(Left loc:_) =
-              let (locs', docs) = span (either (const True) (const False)) es in
-              spanify (map (\(Left (_, _, str)) -> str) locs'):spanLocs docs
-          spanLocs es@(Right doc:_) | isItemBlock doc =
-              let (items, locs) = span (either (const False) isItemBlock) es in
-              mkEnumeration (map (\(Right doc) -> doc) items):spanLocs locs
-          spanLocs (Right doc:docs) = doc:spanLocs docs
+blockify [] = []
+blockify es@(Left loc:_) =
+    let (locs', docs) = span (either (const True) (const False)) es in
+    spanify (map (\(Left (_, _, str)) -> str) locs'):blockify docs
+blockify es@(Right doc:_) | isItemBlock doc =
+    let (items, locs) = span (either (const False) isItemBlock) es in
+    mkEnumeration (map (\(Right doc) -> doc) items):blockify locs
+blockify (Right doc:docs) = doc:blockify docs
 
 
 -- | 'docify' @tks@ parses the sequence of 'Token's @tks@ into a 'Document'.
@@ -180,10 +181,12 @@ docify tks = fst $ docify' SectionT tks [] []
               (mkBlock sty $ reverse docs ++ docs', tks)
 
 
+          sectionT :: Char -> BlockT
           sectionT '*' = ItemT
           sectionT '"' = QuotationT
           sectionT '|' = SectionT
           sectionT '>' = VerbatimT
+
 
           docify' :: BlockT -> [Token] -> [Either Srcloc Document] -> [Document] -> (Document, [Token])
           docify' _ [] [] docs = (mkContent $ reverse docs, [])

@@ -32,6 +32,7 @@ data Document = Document Srcloc Element [Document]
                 deriving (Show)
 
 
+mkDocument :: Element -> [Document] -> Document
 mkDocument = Document (0, [], "")
 
 
@@ -57,10 +58,6 @@ mkParagraph = Document (0, [], "") Paragraph
 
 mkPlain :: String -> Document
 mkPlain str = Document (0, [], "") (Plain str) []
-
-
--- mkSection :: [Document] -> Document
--- mkSection = Document (0, [], "") $ Section
 
 
 mkSpan :: String -> [Document] -> Document
