@@ -14,9 +14,9 @@ isHeadingLn str = last str `notElem` paragraphTerminator
     where paragraphTerminator = ".!?"
 
 
-isUnorderedItemLn :: String -> Bool
-isUnorderedItemLn ('*':' ':_) = True
-isUnorderedItemLn _ = False
+isItemBlock :: Document -> Bool
+isItemBlock (Document _ (Block ItemT) _) = True
+isItemBlock _ = False
 
 
 -- 'reconstruct' @str@ produces the 'List' of 'Text' elements
@@ -53,7 +53,6 @@ reconstruct = reconstructFirst
           reconstructTail (' ':str) = mkPlain " ":reconstructFirst str
           reconstructTail str = plain str
 
-
           -- block sty = "[" ++ sty ++ " "
 
           -- mkText c fn str =
@@ -77,11 +76,6 @@ reconstruct = reconstructFirst
           -- reconstructTail ('[':str) = mkText ']' Ref str
           -- edit: don't capture quotes in words, e.g., "don't" and "can't"
           -- reconstructTail ('\'':str) = spanChar '\'' "emphasis" str
-
-
-isItemBlock :: Document -> Bool
-isItemBlock (Document _ (Block ItemT) _) = True
-isItemBlock _ = False
 
 
 -- Example
@@ -162,31 +156,26 @@ docify tks = fst $ docify' SectionT tks [] []
           shift sty loc tks locs docs =
               docify' sty tks (Left loc:locs) docs
 
-
           pushPop :: BlockT -> BlockT -> [Token] -> [Either Srcloc Document] -> [Document] -> (Document, [Token])
           pushPop sty1 sty2 tks locs docs =
               let (doc, tks') = docify' sty2 tks [] [] in
               docify' sty1 tks' (Right doc:locs) docs
-
           
           reduceEmpty :: BlockT -> [Token] -> [Either Srcloc Document] -> [Document] -> (Document, [Token])
           reduceEmpty sty tks locs docs =
               let docs' = blockify $ reverse locs in
               docify' sty tks [] (reverse docs' ++ docs)
-
           
           reduceSection :: BlockT -> [Token] -> [Either Srcloc Document] -> [Document] -> (Document, [Token])
           reduceSection sty tks locs docs =
               let docs' = blockify $ reverse locs in
               (mkBlock sty $ reverse docs ++ docs', tks)
 
-
           sectionT :: Char -> BlockT
           sectionT '*' = ItemT
           sectionT '"' = QuotationT
           sectionT '|' = SectionT
           sectionT '>' = VerbatimT
-
 
           docify' :: BlockT -> [Token] -> [Either Srcloc Document] -> [Document] -> (Document, [Token])
           docify' _ [] [] docs = (mkContent $ reverse docs, [])

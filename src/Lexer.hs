@@ -35,7 +35,6 @@ reduce idns n ln = section '|' idns idn ++ [tokenize n (push idn idns) $ trim ln
 
 
 isBlockStarter :: String -> Bool
--- isBlockStarter (c:' ':_) = c `notElem` "*" && (c `elem` ">|" || isPunctuation c)
 isBlockStarter (c:' ':_) = c `elem` ">|" || isPunctuation c
 isBlockStarter _ = False
 
