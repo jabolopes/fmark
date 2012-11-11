@@ -97,22 +97,32 @@ tagM tag attrs parentTagT LongT ms = longTagM tag attrs parentTagT ms
 
 docToHtml :: Maybe Document -> Document -> String
 docToHtml _ doc =
-    intercalate "\n" ["<html>", evalState (docToHtml' LongT (mkHtmlDoc doc)) 2, "</html>"]
-    where elementBlockT BulletItemT = "li"
+    intercalate "\n" ["<html>",
+                      evalState hd 2,
+                      evalState body 2,
+                      "</html>"]
+    where hd = tagM "head" [] LongT LongT
+               [tagM "link" [("href", "stylesheet.css"),
+                             ("rel", "stylesheet"),
+                             ("type", "text/css")] LongT ShortT []]
+
+          body = docToHtml' LongT (mkHtmlDoc doc)
+          
+          elementBlockT BulletItemT = "li"
           elementBlockT (NumberItemT _) = "li"
           elementBlockT QuotationT = "blockquote"
           elementBlockT SectionT = "div"
           elementBlockT VerbatimT = "pre"
           
           elementTag (Block t) = tagM (elementBlockT t) []
-          elementTag Content = tagM "content" []
+          elementTag Content = tagM "body" []
           elementTag (Enumeration BulletEnumerationT) = tagM "ul" []
           elementTag (Enumeration NumberEnumerationT) = tagM "ol" []
-          elementTag Heading = tagM "h4" []
+          elementTag Heading = tagM "h3" []
           elementTag Paragraph = tagM "p" []
           elementTag (Plain str) = \_ _ _ -> strM (return str)
           --elementTag Section = tagM "section" []
-          elementTag (Span sty) = tagM sty []
+          elementTag (Span sty) = tagM "span" [("style", sty)]
 
           docToHtml' parentTagT (HtmlDoc tagT el docs) =
              elementTag el parentTagT tagT $ map (docToHtml' tagT) docs
