@@ -98,11 +98,17 @@ tagM tag attrs parentTagT LongT ms = longTagM tag attrs parentTagT ms
 docToHtml :: Maybe Document -> Document -> String
 docToHtml _ doc =
     intercalate "\n" ["<html>", evalState (docToHtml' LongT (mkHtmlDoc doc)) 2, "</html>"]
-    where elementTag (Block t) = tagM (show t) []
+    where elementBlockT BulletItemT = "li"
+          elementBlockT (NumberItemT _) = "li"
+          elementBlockT QuotationT = "blockquote"
+          elementBlockT SectionT = "div"
+          elementBlockT VerbatimT = "pre"
+          
+          elementTag (Block t) = tagM (elementBlockT t) []
           elementTag Content = tagM "content" []
           elementTag (Enumeration BulletEnumerationT) = tagM "ul" []
           elementTag (Enumeration NumberEnumerationT) = tagM "ol" []
-          elementTag Heading = tagM "h1" []
+          elementTag Heading = tagM "h4" []
           elementTag Paragraph = tagM "p" []
           elementTag (Plain str) = \_ _ _ -> strM (return str)
           --elementTag Section = tagM "section" []
