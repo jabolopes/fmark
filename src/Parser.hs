@@ -14,13 +14,21 @@ isHeadingLn str = last str `notElem` paragraphTerminator
     where paragraphTerminator = ".!?"
 
 
-isItemBlock :: Document -> Bool
-isItemBlock (Document _ (Block ItemT) _) = True
-isItemBlock _ = False
+isBulletItem :: Document -> Bool
+isBulletItem (Document _ (Block BulletItemT) _) = True
+isBulletItem _ = False
 
 
 -- 'reconstruct' @str@ produces the 'List' of 'Text' elements
 -- for 'String' @str@.
+--
+-- > How 'are' _you_?
+--
+-- > Plain "How "
+-- > Span "emphasis" "are"
+-- > Plain " "
+-- > Span "underline" "you"
+-- > Plain "?"
 reconstruct :: String -> [Document]
 reconstruct = reconstructFirst
     where spanChar c sty str =
@@ -37,6 +45,7 @@ reconstruct = reconstructFirst
                                         (hd ++ [c] ++ hd', tl', b)
 
           spanStarters = "'_"
+
           spanStyle '\'' = "emphasis"
           spanStyle '_' = "underline"
 
@@ -52,30 +61,6 @@ reconstruct = reconstructFirst
           reconstructTail "" = []
           reconstructTail (' ':str) = mkPlain " ":reconstructFirst str
           reconstructTail str = plain str
-
-          -- block sty = "[" ++ sty ++ " "
-
-          -- mkText c fn str =
-          --     case span (/= c) str of
-          --       (hd, []) -> [Plain hd]
-          --       (hd, _:tl) -> fn hd:reconstructTail tl
-
-          -- isSpan sty str = take (length (block sty)) str == (block sty)
-
-          -- mkSpanElement sty str =
-          --     case span (/= ']') (drop (length (block sty)) str) of
-          --       (hd, []) -> [mkPlain hd]
-          --       (hd, _:tl) -> mkSpan sty (reconstructTail hd):reconstructTail tl
-
-
-          -- reconstructTail str | isSpan "bold" str = mkSpanElement "bold" str
-          --                 | isSpan "italic" str = mkSpanElement "italic" str
-          --                 | isSpan "underline" str = mkSpanElement "underline" str
-          --                 | isSpan "footnote" str = mkSpanElement "footnote" str
-          --                 | isSpan "cite" str = mkSpanElement "cite" str
-          -- reconstructTail ('[':str) = mkText ']' Ref str
-          -- edit: don't capture quotes in words, e.g., "don't" and "can't"
-          -- reconstructTail ('\'':str) = spanChar '\'' "emphasis" str
 
 
 -- Example
@@ -139,12 +124,24 @@ spanify lns
 -- >    Doc (string7 ... ' ' string8 ... '.')
 blockify :: [Either Srcloc Document] -> [Document]
 blockify [] = []
-blockify es@(Left loc:_) =
-    let (locs', docs) = span (either (const True) (const False)) es in
-    spanify (map (\(Left (_, _, str)) -> str) locs'):blockify docs
-blockify es@(Right doc:_) | isItemBlock doc =
-    let (items, locs) = span (either (const False) isItemBlock) es in
-    mkEnumeration (map (\(Right doc) -> doc) items):blockify locs
+
+blockify es@(Left _:_) =
+    let (locs, docs) = span (either (const True) (const False)) es in
+    spanify (map (\(Left (_, _, str)) -> str) locs):blockify docs
+
+blockify es@(Right doc:_) | isBulletItem doc =
+    let  (items, locs) = span (either (const False) isBulletItem) es in
+    mkEnumeration BulletEnumerationT (map (\(Right doc) -> doc) items):blockify locs
+
+blockify (Right item@(Document _ (Block (NumberItemT n)) _):es) =
+    let (items, locs) = spanOrderedItems n es in
+    mkEnumeration NumberEnumerationT (item:items):blockify locs
+        where spanOrderedItems _ xs@[] =  ([], xs)
+              spanOrderedItems n1 xs@(Right x@(Document _ (Block (NumberItemT n2)) _):xs')
+                  | n1 == n2 - 1 = let (ys,zs) = spanOrderedItems n2 xs' in (x:ys,zs)
+                  | otherwise = ([], xs)
+              spanOrderedItems _ xs = ([], xs)
+
 blockify (Right doc:docs) = doc:blockify docs
 
 
@@ -171,11 +168,12 @@ docify tks = fst $ docify' SectionT tks [] []
               let docs' = blockify $ reverse locs in
               (mkBlock sty $ reverse docs ++ docs', tks)
 
-          sectionT :: Char -> BlockT
-          sectionT '*' = ItemT
-          sectionT '"' = QuotationT
-          sectionT '|' = SectionT
-          sectionT '>' = VerbatimT
+          sectionT :: String -> BlockT
+          sectionT "*" = BulletItemT
+          sectionT "\"" = QuotationT
+          sectionT "|" = SectionT
+          sectionT ">" = VerbatimT
+          sectionT ds = NumberItemT (read ds :: Int)
 
           docify' :: BlockT -> [Token] -> [Either Srcloc Document] -> [Document] -> (Document, [Token])
           docify' _ [] [] docs = (mkContent $ reverse docs, [])

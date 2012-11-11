@@ -14,7 +14,7 @@ data Token
     -- | 'BeginSection' represents the beginning of a new section,
     -- i.e., increase in indentation or an unmatched decrease in
     -- indentation.
-    | BeginSection Char
+    | BeginSection String
     -- | 'EndSection' represents the end of a section, i.e., a
     -- decrease in indentation.
     | EndSection

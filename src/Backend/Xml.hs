@@ -124,8 +124,8 @@ docToXml _ doc =
     intercalate "\n" ["<xml>", evalState (docToXml' doc) (XmlState 2 True), "</xml>"]
     where elementTag :: Element -> ([XmlM String] -> XmlM String)
           elementTag (Block t) = xmlLongTags (show t) []
-          elementTag Content = tag "content" []
-          elementTag Enumeration = xmlLongTags "enumeration" []
+          elementTag Content = xmlLongTags "content" []
+          elementTag (Enumeration t) = xmlLongTags "enumeration" [("type", show t)]
           elementTag Heading = xmlLongTags "heading" []
           elementTag Paragraph = xmlShortTags "paragraph" []
           elementTag (Plain str) = const $ xmlStr $ return str

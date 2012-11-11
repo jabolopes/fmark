@@ -10,6 +10,7 @@ import System.IO
 import System.Process
 --import System.Unix.Directory (withTemporaryDirectory)
 
+import Backend.Html
 --import Backend.Latex
 import Backend.Xml
 import Data.Document
@@ -44,6 +45,8 @@ import Utils
 data Format
     -- | Output to 'stdout' in 'Document' format.
     = FormatDoc
+    -- | Output to 'stdout' in Html format.
+    | FormatHtml
     -- | Output to 'stdout' in LaTeX format.
     | FormatLatex
     -- | Output to a PDF file using LaTeX format and 'pdflatex'.
@@ -60,6 +63,7 @@ data Format
 -- appropriate formatter function.
 formatFn :: Format -> Maybe Document -> Document -> String
 formatFn FormatDoc = const show
+formatFn FormatHtml = docToHtml
 --formatFn FormatLatex = docToLatex
 formatFn FormatPdf = formatFn FormatLatex
 formatFn FormatXml = docToXml

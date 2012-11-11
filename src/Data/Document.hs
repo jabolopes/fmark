@@ -4,28 +4,46 @@ import Data.Token (Srcloc)
 
 
 data BlockT
-    = ItemT
+    = BulletItemT
+    | NumberItemT Int
     | QuotationT
     | SectionT
     | VerbatimT
       deriving (Eq)
 
 instance Show BlockT where
-    show ItemT = "item"
+    show BulletItemT = "unordered"
+    show (NumberItemT i) = "ordered " ++ show i
     show QuotationT = "quotation"
     show SectionT = "section"
     show VerbatimT = "verbatim"
 
 
+data EnumerationT
+    = BulletEnumerationT
+    | NumberEnumerationT
+      deriving (Eq, Show)
+
+
 data Element
     = Block BlockT
     | Content
-    | Enumeration
+    | Enumeration EnumerationT
     | Heading
     | Paragraph
     | Plain String
     | Span String
       deriving (Eq, Show)
+
+
+isParagraphElement :: Element -> Bool
+isParagraphElement Paragraph = True
+isParagraphElement _ = False
+
+
+isSpanElement :: Element -> Bool
+isSpanElement (Span _) = True
+isSpanElement _ = False
 
 
 data Document = Document Srcloc Element [Document]
@@ -44,8 +62,8 @@ mkContent :: [Document] -> Document
 mkContent = Document (0, [], "") Content
 
 
-mkEnumeration :: [Document] -> Document
-mkEnumeration = Document (0, [], "") Enumeration
+mkEnumeration :: EnumerationT -> [Document] -> Document
+mkEnumeration t = Document (0, [], "") (Enumeration t)
 
 
 mkHeading :: [Document] -> Document

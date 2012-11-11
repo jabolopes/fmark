@@ -15,6 +15,8 @@ import Utils
 data Flag
     -- | Output to 'stdout' in 'Document' format.
     = OutputDoc
+    -- | Output to 'stdout' in Html format.
+    | OutputHtml
     -- | Output to 'stdout' in LaTeX format.
     | OutputLatex
     -- | Output to a PDF file using LaTeX format and 'pdflatex'.
@@ -33,6 +35,7 @@ data Flag
 
 formatOfFlag :: Flag -> Format
 formatOfFlag OutputDoc = FormatDoc
+formatOfFlag OutputHtml = FormatHtml
 formatOfFlag OutputLatex = FormatLatex
 formatOfFlag OutputPdf = FormatPdf
 formatOfFlag OutputToken = FormatToken
@@ -41,6 +44,7 @@ formatOfFlag OutputXml = FormatXml
 
 -- | 'options' represents the command line options.
 options = [Option "d" ["doc"] (NoArg OutputDoc) "Output doc",
+           Option "h" ["html"] (NoArg OutputHtml) "Output html",
            Option "l" ["latex"] (NoArg OutputLatex) "Output latex",
            Option "p" ["pdf"] (NoArg OutputPdf) "Output PDF",
            Option "s" ["style"] (ReqArg StyleName "style-name") "Style",
