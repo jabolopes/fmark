@@ -49,18 +49,23 @@ reconstruct = reconstructFirst
           spanStyle '\'' = "emphasis"
           spanStyle '_' = "underline"
 
-          plain str =
-              case span (/= ' ') str of
-                ([], c:tl) -> mkPlain [c]:reconstructTail tl
-                (hd, tl) -> mkPlain hd:reconstructTail tl
+          spanPlain str =
+              case span' str of
+                (hd, tl) -> mkPlain hd:reconstructFirst tl
+              where span' str =
+                        case span (/= ' ') str of
+                          (hd, []) -> (hd, "")
+                          (hd, ' ':c:tl) | c `elem` spanStarters -> (hd ++ " ", c:tl)
+                          (hd, ' ':tl) -> let (hd', tl') = span' tl in
+                                          (hd ++ " " ++ hd', tl')
 
           reconstructFirst "" = []
           reconstructFirst (c:str) | c `elem` spanStarters = spanChar c (spanStyle c) str
-          reconstructFirst str = plain str
+          reconstructFirst str = spanPlain str
 
           reconstructTail "" = []
-          reconstructTail (' ':str) = mkPlain " ":reconstructFirst str
-          reconstructTail str = plain str
+          reconstructTail (' ':c:str) | c `elem` spanStarters = mkPlain " ":reconstructFirst (c:str)
+          reconstructTail str = spanPlain str
 
 
 -- Example
