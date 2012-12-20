@@ -9,7 +9,6 @@ data BlockT
     | QuotationT
     | SectionT
     | VerbatimT
-      deriving (Eq)
 
 instance Show BlockT where
     show BulletItemT = "unordered"
@@ -22,7 +21,7 @@ instance Show BlockT where
 data EnumerationT
     = BulletEnumerationT
     | NumberEnumerationT
-      deriving (Eq, Show)
+      deriving (Show)
 
 
 data Element
@@ -33,7 +32,7 @@ data Element
     | Paragraph
     | Plain String
     | Span String
-      deriving (Eq, Show)
+      deriving (Show)
 
 
 isParagraphElement :: Element -> Bool
@@ -80,10 +79,6 @@ mkPlain str = Document (0, [], "") (Plain str) []
 
 mkSpan :: String -> [Document] -> Document
 mkSpan sty docs = Document (0, [], "") (Span sty) docs
-
-
-isDocument :: Element -> Document -> Bool
-isDocument t1 (Document _ t2 _) = t1 == t2
 
 
 isBlock :: Document -> Bool
