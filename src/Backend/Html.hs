@@ -102,7 +102,7 @@ docToHtml _ doc =
                       evalState body 2,
                       "</html>"]
     where hd = tagM "head" [] LongT LongT
-               [tagM "link" [("href", "stylesheet.css"),
+               [tagM "link" [("href", "style.css"),
                              ("rel", "stylesheet"),
                              ("type", "text/css")] LongT ShortT []]
 

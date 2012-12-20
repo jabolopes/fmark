@@ -7,13 +7,14 @@ import Data.Document
 import Data.Token
 
 
--- 'isParagraphItemLn' @str@ decides whether @str@ is a paragraph or
--- a heading.
+-- 'isParagraphItemLn' @str@ decides whether @str@ is a heading or a
+-- paragraph.
 isHeadingLn :: String -> Bool
 isHeadingLn str = last str `notElem` paragraphTerminator
     where paragraphTerminator = ".!?"
 
 
+-- 'isBulletItem' @doc@
 isBulletItem :: Document -> Bool
 isBulletItem (Document _ (Block BulletItemT) _) = True
 isBulletItem _ = False
@@ -22,6 +23,7 @@ isBulletItem _ = False
 -- 'reconstruct' @str@ produces the 'List' of 'Text' elements
 -- for 'String' @str@.
 --
+-- Example
 -- > How 'are' _you_?
 --
 -- > Plain "How "
@@ -162,12 +164,12 @@ docify tks = fst $ docify' SectionT tks [] []
           pushPop sty1 sty2 tks locs docs =
               let (doc, tks') = docify' sty2 tks [] [] in
               docify' sty1 tks' (Right doc:locs) docs
-          
+
           reduceEmpty :: BlockT -> [Token] -> [Either Srcloc Document] -> [Document] -> (Document, [Token])
           reduceEmpty sty tks locs docs =
               let docs' = blockify $ reverse locs in
               docify' sty tks [] (reverse docs' ++ docs)
-          
+
           reduceSection :: BlockT -> [Token] -> [Either Srcloc Document] -> [Document] -> (Document, [Token])
           reduceSection sty tks locs docs =
               let docs' = blockify $ reverse locs in

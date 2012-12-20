@@ -35,12 +35,17 @@ reduce idns n ln = section "|" idns idn ++ [tokenize n (push idn idns) $ trim ln
     where idn = indentation ln
 
 
+sectionTBlockStarter :: [Char]
 sectionTBlockStarter = "|"
+
+
+blockStarterChars :: [Char]
+blockStarterChars = "*\"|>"
 
 
 blockStarter :: String -> Maybe (String, String)
 blockStarter (c:' ':ln)
-    | c `elem` "*\"|>" = Just ([c], replicate 2 ' ' ++ ln)
+    | c `elem` blockStarterChars = Just ([c], replicate 2 ' ' ++ ln)
     | otherwise = Nothing
 
 blockStarter ln =
