@@ -166,34 +166,17 @@ Download the source either by cloning the repository or by downloading
 the source archive. Once you have the source, you can either use Cabal
 (recommended) or the standard Haskell setup mechanism.
 
-For Cabal, follow these steps
+For Cabal, follow these steps to configure and build the application,
+compile the documentation, and install the application.
 
     $ cabal configure
-
-build application
-
     $ cabal build
-
-compile documentation
-
     $ cabal haddock --executables
-
-install application
-
     $ cabal install
 
 For the standard Haskell setup, follow these steps
 
     $ runhaskell Setup configure
-
-build application
-
     $ runhaskell Setup build
-
-compile documentation
-
     $ runhaskell Setup haddock --executables
-
-install application
-
     $ runhaskell Setup install
