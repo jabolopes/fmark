@@ -1,10 +1,12 @@
 {-# LANGUAGE BangPatterns #-}
 module Parser where
 
+import Data.Char
 import Data.List (intercalate)
 
 import Data.Document
 import Data.Token
+import Utils
 
 
 -- 'isParagraphItemLn' @str@ decides whether @str@ is a heading or a
@@ -20,6 +22,129 @@ isBulletItem (Document _ (Block BulletItemT) _) = True
 isBulletItem _ = False
 
 
+interleaveAppend :: String -> String -> String
+interleaveAppend xs1 [] = xs1
+interleaveAppend [] xs2 = xs2
+interleaveAppend xs1 xs2 = xs1 ++ " " ++ xs2
+
+
+spanQuote :: String -> (String, String)
+spanQuote str =
+    case span (/= '\'') str of
+      (hd, "") -> ("", hd)
+      (hd, '\'':tl)
+          | null tl -> (hd, "")
+          | isSpace (head tl) -> (hd, tl)
+          | otherwise -> case spanQuote tl of
+                           ("", _) -> (hd, tl)
+                           (hd', tl') -> (hd ++ "'" ++ hd', tl')
+
+
+spanUnderline :: String -> (String, String)
+spanUnderline str =
+    case span ((/= '_') &&. (not . isSpace)) str of
+      (hd, "") -> ("", hd)
+      (hd, "_") -> (hd, "")
+
+      (hd, c1:c2:tl) | c1 == '_' && c2 == '_' -> (hd, '_':tl)
+
+      (hd, '_':tl)
+          | isAlphaNum (head tl) || head tl == '\'' ->
+              let (hd', tl') = spanUnderline tl in
+              (interleaveAppend hd hd', tl')
+          | otherwise -> (hd, tl)
+
+      (hd, tl)
+          | isSpace (head tl) -> ("", str)
+
+
+spanPlain :: String -> (String, String)
+spanPlain str =
+    case span ((not . isSpace) &&. (/= '_')) str of
+      (hd, "") -> (hd, "")
+
+      (hd, c:tl)
+          | isSpace c && head tl == '\'' ->
+              case spanQuote (tail tl) of
+                ("", _) -> (str, "")
+                _ -> (hd ++ [c], tl)
+          | isSpace c && head tl == '_' ->
+              case spanUnderline (tail tl) of
+                ("", _) -> (str, "")
+                _ -> (hd ++ [c], tl)
+          | isSpace c ->
+              let (hd', tl') = spanPlain tl in
+              (hd ++ [c] ++ hd', tl')
+
+      (hd, tl)
+          | head tl == '_' ->
+              case spanUnderline (tail tl) of
+                ("", _) -> (str, "")
+                _ -> (hd, tl)
+
+
+-- Example
+-- > _hello_world_
+--
+-- > ("hello world", "")
+--
+-- Example
+-- > _hello_world
+--
+-- > ("hello", "world")
+--
+-- Example
+-- > _hello world
+--
+-- > ("", "_hello world")
+--
+-- Example
+-- > _hello_world_, goodbye
+--
+-- > ("hello world", ", goodbye")
+--
+-- Example
+-- > _hello_world, goodbye
+--
+-- > ("hello", "world, goodbye")
+--
+-- Example
+-- > _hello, world goodbye
+--
+-- > ("", "_hello, world goodbye")
+--
+-- Example
+-- > 'hello' 'world
+--
+-- > ("hello", " 'world")
+spanChar :: String -> (String, String)
+spanChar (c:str) =
+    case findFn c str of
+      ([], tl) -> ([], c:tl)
+      (hd, tl) -> (hd, tl)
+    where findFn '\'' = spanQuote
+          findFn '_' = spanUnderline
+
+
+spanStarters :: String
+spanStarters = "'_"
+
+
+reconstructStyle :: String -> [Document]
+reconstructStyle str@(c:_) =
+    case spanChar str of
+      ([], _) -> reconstructPlain str
+      (hd, tl) -> mkSpan (spanStyle c) [mkPlain hd]:reconstruct tl
+    where spanStyle '\'' = "emphasis"
+          spanStyle '_' = "underline"
+
+
+reconstructPlain :: String -> [Document]
+reconstructPlain str =
+    case spanPlain str of
+      (hd, tl) -> mkPlain hd:reconstruct tl
+
+
 -- 'reconstruct' @str@ produces the 'List' of 'Text' elements
 -- for 'String' @str@.
 --
@@ -32,42 +157,10 @@ isBulletItem _ = False
 -- > Span "underline" "you"
 -- > Plain "?"
 reconstruct :: String -> [Document]
-reconstruct = reconstructFirst
-    where spanChar c sty str =
-              case span' str of
-                (hd, tl, True) -> mkSpan sty [mkPlain hd]:reconstructTail tl
-                (hd, tl, _) -> [mkPlain (c:hd)]
-              where span' str =
-                        case span (/= c) str of
-                          (hd, []) -> (hd, "", False)
-                          (hd, [c']) | c == c' -> (hd, "", True)
-                          (hd, c':' ':tl) | c == c' -> (hd, ' ':tl, True)
-                          -- info: '_' has to be equal to 'c'
-                          (hd, _:tl) -> let (hd', tl', b) = span' tl in
-                                        (hd ++ [c] ++ hd', tl', b)
-
-          spanStarters = "'_"
-
-          spanStyle '\'' = "emphasis"
-          spanStyle '_' = "underline"
-
-          spanPlain str =
-              case span' str of
-                (hd, tl) -> mkPlain hd:reconstructFirst tl
-              where span' str =
-                        case span (/= ' ') str of
-                          (hd, []) -> (hd, "")
-                          (hd, ' ':c:tl) | c `elem` spanStarters -> (hd ++ " ", c:tl)
-                          (hd, ' ':tl) -> let (hd', tl') = span' tl in
-                                          (hd ++ " " ++ hd', tl')
-
-          reconstructFirst "" = []
-          reconstructFirst (c:str) | c `elem` spanStarters = spanChar c (spanStyle c) str
-          reconstructFirst str = spanPlain str
-
-          reconstructTail "" = []
-          reconstructTail (' ':c:str) | c `elem` spanStarters = mkPlain " ":reconstructFirst (c:str)
-          reconstructTail str = spanPlain str
+reconstruct str
+    | null str = []
+    | head str `elem` spanStarters = reconstructStyle str
+    | otherwise = reconstructPlain str
 
 
 -- Example
