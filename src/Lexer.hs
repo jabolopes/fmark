@@ -68,9 +68,10 @@ classify str = classify' [0] $ zip [1..] $ lines str
                       pre = takeWhile isSpace ln
                       Just (cs, suf) = blockStarter (dropWhile isSpace ln)
                       ln' = pre ++ suf
-                      s1 = section sectionTBlockStarter idns $ indentation ln
-                      s2 = section cs (push (indentation ln) idns) $ indentation ln'
-                      lns' = classify' (push (indentation ln') idns) $ (n, ln'):lns
+                      s1 = section sectionTBlockStarter idns (indentation ln)
+                      idns' = drop (length s1) idns
+                      s2 = section cs (push (indentation ln) idns') (indentation ln')
+                      lns' = classify' (push (indentation ln') idns') $ (n, ln'):lns
                   in
                     case lns' of
                       [] -> s1 ++ s2 ++ lns'
