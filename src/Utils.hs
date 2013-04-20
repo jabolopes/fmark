@@ -1,27 +1,16 @@
-{-# LANGUAGE ParallelListComp #-}
 -- | 'Utils' is a module of assorted utilities.
 module Utils where
 
 import Data.Char (isSpace)
-
--- EDIT: for new GHC
---import Data.List (dropWhileEnd)
+import Data.List (dropWhileEnd)
 
 
--- EDIT: for old GHC
+(&&.) :: (t -> Bool) -> (t -> Bool) -> t -> Bool
+(&&.) fn1 fn2 = \x -> fn1 x && fn2 x
 
--- | The 'dropWhileEnd' function drops the largest suffix of a list
--- in which the given predicate holds for all elements.  For example:
---
--- > dropWhileEnd isSpace "foo\n" == "foo"
--- > dropWhileEnd isSpace "foo bar" == "foo bar"
--- > dropWhileEnd isSpace ("foo\n" ++ undefined) == "foo" ++ undefined
 
-dropWhileEnd :: (a -> Bool) -> [a] -> [a]
-dropWhileEnd p = foldr (\x xs -> if p x && null xs then [] else x : xs) []
-
--- /
-
+(||.) :: (t -> Bool) -> (t -> Bool) -> t -> Bool
+(||.) fn1 fn2 = \x -> fn1 x || fn2 x
 
 
 -- | 'filterLines' @lns@ filters empty lines and lines containing only
