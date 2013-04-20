@@ -1,13 +1,12 @@
 module Main where
 
-import Data.List (intercalate)
+import Data.List (dropWhileEnd, intercalate)
 
 import System.Console.GetOpt
 import System.Environment (getArgs, getProgName)
 import System.IO
 
 import Fmark
-import Utils
 
 
 -- | 'Flag' represents the command line flags that specify output
