@@ -31,7 +31,7 @@ tokenize n idns ln = Literal (n, idns, ln)
 -- holding @ln@ preceeded by the appropriate section 'Token's as
 -- issued by 'section' according to the indentation stack @idns@.
 reduce :: [Int] -> Int -> String -> [Token]
-reduce idns n ln = section "|" idns idn ++ [tokenize n (push idn idns) $ trim ln]
+reduce idns n ln = section "|" idns idn ++ [tokenize n (push idn idns) (trim ln)]
     where idn = indentation ln
 
 
