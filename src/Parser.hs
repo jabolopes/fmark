@@ -1,7 +1,10 @@
 {-# LANGUAGE BangPatterns #-}
 module Parser where
 
+import Control.Monad.State
 import Data.Char
+import Data.Either (either)
+import Data.Functor ((<$>))
 import Data.List (intercalate)
 
 import Data.Document
@@ -22,127 +25,124 @@ isBulletItem (Document _ (Block BulletItemT) _) = True
 isBulletItem _ = False
 
 
-interleaveAppend :: String -> String -> String
-interleaveAppend xs1 [] = xs1
-interleaveAppend [] xs2 = xs2
-interleaveAppend xs1 xs2 = xs1 ++ " " ++ xs2
+data ParserState =
+    ParserState { input :: String
+                , stack :: [Either String Document]
+                , isEmphasis :: Bool
+                , isUnderline :: Bool }
+
+type ParserM a = State ParserState a
 
 
-spanQuote :: String -> (String, String)
-spanQuote str =
-    case span (/= '\'') str of
-      (hd, "") -> ("", hd)
-      (hd, '\'':tl)
-          | null tl -> (hd, "")
-          | isSpace (head tl) -> (hd, tl)
-          | otherwise -> case spanQuote tl of
-                           ("", _) -> (hd, tl)
-                           (hd', tl') -> (hd ++ "'" ++ hd', tl')
+skipM :: ParserM ()
+skipM = modify $ \s -> s { input = tail (input s) }
 
 
-spanUnderline :: String -> (String, String)
-spanUnderline str =
-    case span ((/= '_') &&. (not . isSpace)) str of
-      (hd, "") -> ("", hd)
-      (hd, "_") -> (hd, "")
-
-      (hd, c1:c2:tl) | c1 == '_' && c2 == '_' -> (hd, '_':tl)
-
-      (hd, '_':tl)
-          | isAlphaNum (head tl) || head tl == '\'' ->
-              let (hd', tl') = spanUnderline tl in
-              (interleaveAppend hd hd', tl')
-          | otherwise -> (hd, tl)
-
-      (hd, tl)
-          | isSpace (head tl) -> ("", str)
+shiftM :: ParserM ()
+shiftM =
+    do s <- get
+       let c = head (input s)
+       case head (stack s) of
+         Left str -> put s { input = tail (input s)
+                           , stack = Left (c:str):tail (stack s) }
+         Right _ -> put s { input = tail (input s)
+                          , stack = Left [c]:stack s }
 
 
-spanPlain :: String -> (String, String)
-spanPlain str =
-    case span ((not . isSpace) &&. (/= '_')) str of
-      (hd, "") -> (hd, "")
-
-      (hd, c:tl)
-          | isSpace c && head tl == '\'' ->
-              case spanQuote (tail tl) of
-                ("", _) -> (str, "")
-                _ -> (hd ++ [c], tl)
-          | isSpace c && head tl == '_' ->
-              case spanUnderline (tail tl) of
-                ("", _) -> (str, "")
-                _ -> (hd ++ [c], tl)
-          | isSpace c ->
-              let (hd', tl') = spanPlain tl in
-              (hd ++ [c] ++ hd', tl')
-
-      (hd, tl)
-          | head tl == '_' ->
-              case spanUnderline (tail tl) of
-                ("", _) -> (str, "")
-                _ -> (hd, tl)
+gotoM :: (String -> ParserM a) -> ParserM a
+gotoM m = m =<< input <$> get
 
 
--- Example
--- > _hello_world_
---
--- > ("hello world", "")
---
--- Example
--- > _hello_world
---
--- > ("hello", "world")
---
--- Example
--- > _hello world
---
--- > ("", "_hello world")
---
--- Example
--- > _hello_world_, goodbye
---
--- > ("hello world", ", goodbye")
---
--- Example
--- > _hello_world, goodbye
---
--- > ("hello", "world, goodbye")
---
--- Example
--- > _hello, world goodbye
---
--- > ("", "_hello, world goodbye")
---
--- Example
--- > 'hello' 'world
---
--- > ("hello", " 'world")
-spanChar :: String -> (String, String)
-spanChar (c:str) =
-    case findFn c str of
-      ([], tl) -> ([], c:tl)
-      (hd, tl) -> (hd, tl)
-    where findFn '\'' = spanQuote
-          findFn '_' = spanUnderline
+reduceEmphasisM :: ParserM ()
+reduceEmphasisM =
+    do s <- get
+       let sty = case head (stack s) of
+                   Left str -> mkSpan "emphasis" [mkPlain (tail (reverse str))]
+                   Right doc -> mkSpan "emphasis" [doc]
+       put s { stack = Right sty:tail (stack s) }
 
 
-spanStarters :: String
-spanStarters = "'_"
+reduceUnderlineM :: ParserM ()
+reduceUnderlineM =
+    do s <- get
+       let sty = case head (stack s) of
+                   Left str -> mkSpan "underline" [mkPlain (tail (reverse str))]
+                   Right doc -> mkSpan "underline" [doc]
+       put s { stack = Right sty:tail (stack s) }
 
 
-reconstructStyle :: String -> [Document]
-reconstructStyle str@(c:_) =
-    case spanChar str of
-      ([], _) -> reconstructPlain str
-      (hd, tl) -> mkSpan (spanStyle c) [mkPlain hd]:reconstruct tl
-    where spanStyle '\'' = "emphasis"
-          spanStyle '_' = "underline"
+reducePlainM :: ParserM ()
+reducePlainM =
+    do s <- get
+       let sty = case head (stack s) of
+                   Left str -> mkPlain (reverse str)
+                   Right doc -> error "reducePlainM"
+       put s { stack = Right sty:tail (stack s) }
 
 
-reconstructPlain :: String -> [Document]
-reconstructPlain str =
-    case spanPlain str of
-      (hd, tl) -> mkPlain hd:reconstruct tl
+reconstructEmphasis :: String -> ParserM ()
+reconstructEmphasis str
+    | null str = reducePlainM
+    | head str == '\'' =
+        do skipM
+           reduceEmphasisM
+    | head str == '_' =
+        do underline <- isUnderline <$> get
+           unless underline $ do
+             shiftM
+             reconstructUnderlineM
+             reconstructEmphasisM
+    | otherwise =
+        do shiftM
+           reconstructEmphasisM
+
+
+reconstructUnderline :: String -> ParserM ()
+reconstructUnderline str
+    | null str = reducePlainM
+    | head str == '\'' =
+        do emphasis <- isEmphasis <$> get
+           unless emphasis $ do
+             shiftM
+             reconstructEmphasisM
+             reconstructUnderlineM
+    | head str == '_' =
+        do skipM
+           reduceUnderlineM
+    | otherwise =
+        do shiftM
+           reconstructUnderlineM
+
+
+reconstructEmphasisM :: ParserM ()
+reconstructEmphasisM =
+    do modify $ \s -> s { isEmphasis = True }
+       gotoM reconstructEmphasis
+       modify $ \s -> s { isEmphasis = False }
+
+
+reconstructUnderlineM :: ParserM ()
+reconstructUnderlineM =
+    do modify $ \s -> s { isUnderline = True }
+       gotoM reconstructUnderline
+       modify $ \s -> s { isUnderline = False }
+
+
+reconstructM :: String -> ParserM ()
+reconstructM str
+    | null str = reducePlainM
+    | head str == '\'' = shiftM >> reconstructEmphasisM
+    | head str == '_' = shiftM >> reconstructUnderlineM
+    | otherwise = shiftM >> gotoM reconstructM
+
+
+reconstruct :: String -> [Document]
+reconstruct str =
+    let (_, s) = runState (gotoM reconstructM) ParserState { input = str
+                                                           , stack = [Left ""]
+                                                           , isEmphasis = False
+                                                           , isUnderline = False } in
+    [either (error "reconstruct") id (head (stack s))]
 
 
 -- 'reconstruct' @str@ produces the 'List' of 'Text' elements
@@ -156,11 +156,6 @@ reconstructPlain str =
 -- > Plain " "
 -- > Span "underline" "you"
 -- > Plain "?"
-reconstruct :: String -> [Document]
-reconstruct str
-    | null str = []
-    | head str `elem` spanStarters = reconstructStyle str
-    | otherwise = reconstructPlain str
 
 
 -- Example
