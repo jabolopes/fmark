@@ -20,7 +20,7 @@ import Parser
 --import Weaver
 
 
--- | 'pdflatex' @outFp contents@ executes the 'pdflatex' 'Process'
+-- 'pdflatex' @outFp contents@ executes the 'pdflatex' 'Process'
 -- with @contents@ as input and @outFp@ as the 'FilePath' for the
 -- output PDF.
 -- pdflatex :: FilePath -> String -> IO ()
