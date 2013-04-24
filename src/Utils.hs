@@ -21,6 +21,11 @@ filterLines :: [String] -> [String]
 filterLines lns = [ ln | ln <- lns, trim ln /= "" ]
 
 
+isLeft :: Either a b -> Bool
+isLeft (Left _) = True
+isLeft _ = False
+
+
 -- | 'replace' @c str@ replaces newlines in @str@ with @c@
 --
 -- > replace "hello\ngoodbye" == "hello,goodbye"

@@ -70,6 +70,19 @@ pushM :: ParserM ()
 pushM = modify $ \s -> s { stack = []:stack s }
 
 
+popM :: ParserM ()
+popM =
+    do stack <- stack <$> get
+       let top = head stack
+           stack' = tail stack
+           top' = head stack'
+       modify $ \s -> s { stack = (appendLefts top top'):tail stack' }
+    where appendLefts [Left str1] (Left str2:ys) =
+              Left (str1 ++ str2):ys
+          appendLefts [] ys = ys
+          appendLefts (x:xs) ys = x:appendLefts xs ys
+
+
 reduceM :: ([Either String Document] -> Document) -> ParserM ()
 reduceM fn =
     do stack <- stack <$> get
@@ -100,7 +113,9 @@ reducePlainM = reduceM reducePlain
 
 reconstructEmphasis :: String -> ParserM ()
 reconstructEmphasis str
-    | null str = reducePlainM
+    | null str =
+        do modify $ \s -> s { isEmphasis = False }
+           reducePlainM
     | head str == '\'' =
         do emphasis <- isEmphasis <$> get
            if emphasis
@@ -125,10 +140,16 @@ reconstructEmphasis str
 
 reconstructUnderline :: String -> ParserM ()
 reconstructUnderline str
-    | null str = reducePlainM
+    | null str =
+        do modify $ \s -> s { isUnderline = False }
+           reducePlainM
     | head str == '\'' =
         do emphasis <- isEmphasis <$> get
-           unless emphasis $ do
+           if emphasis
+           then do
+             modify $ \s -> s { isUnderline = False }
+             popM
+           else do
              gotoM reconstructEmphasis
              gotoM reconstructUnderline
     | head str == '_' =
@@ -174,7 +195,8 @@ reconstructPlain str
 
 reconstructM :: String -> ParserM ()
 reconstructM str
-    | null str = modify $ \s -> s { stack = reverse (head (stack s)):tail (stack s) }
+    | null str =
+        modify $ \s -> s { stack = reverse (head (stack s)):tail (stack s) }
     | head str == '\'' =
         do gotoM reconstructEmphasis
            gotoM reconstructM
@@ -188,17 +210,19 @@ reconstructM str
 
 reconstruct :: String -> [Document]
 reconstruct str =
-    let state = ParserState { input = str
+    let
+        state = ParserState { input = str
                             , stack = []
                             , isEmphasis = False
                             , isPlain = False
                             , isUnderline = False }
-        (_, state') = runState (pushM >> reconstructM str) state in
-    case stack state' of
-      [] -> error "stack is empty"
-      [[]] -> error "stack of stack is empty"
-      [docs] -> map (either (error "reconstruct") id) docs
-      x -> error $ "problematic " ++ show x
+        (_, state') = runState (pushM >> reconstructM str) state
+    in
+      case stack state' of
+        [] -> error "stack is empty"
+        [[]] -> error "stack of stack is empty"
+        [docs] -> map (either (error "reconstruct") id) docs
+        x -> error $ "problematic " ++ show x
 
 
 -- 'reconstruct' @str@ produces the 'List' of 'Text' elements
