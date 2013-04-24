@@ -50,6 +50,16 @@ shiftM =
              , stack = top:tail (stack s) }
 
 
+reduceM :: ([Either Char Document] -> Document) -> ParserM ()
+reduceM fn =
+    do stack <- stack <$> get
+       let top = reverse (head stack)
+           doc = fn top
+           stack' = tail stack
+           top' = head stack'
+       modify $ \s -> s { stack = (Right doc:top'):tail stack' }
+
+
 gotoM :: (String -> ParserM a) -> ParserM a
 gotoM m = m =<< input <$> get
 
@@ -67,14 +77,19 @@ popM =
        modify $ \s -> s { stack = (top ++ top'):tail stack' }
 
 
-reduceM :: ([Either Char Document] -> Document) -> ParserM ()
-reduceM fn =
-    do stack <- stack <$> get
-       let top = reverse (head stack)
-           doc = fn top
-           stack' = tail stack
-           top' = head stack'
-       modify $ \s -> s { stack = (Right doc:top'):tail stack' }
+enterM
+    :: (Bool -> ParserState -> ParserState)
+    -> (String -> ParserM a)
+    -> (String -> ParserM b)
+    -> ParserM ()
+enterM stateFn grammarM reduceActionM =
+    do modify (stateFn True)
+       pushM
+       shiftM
+       gotoM grammarM
+       str <- input <$> get
+       reduceActionM str
+       modify (stateFn False)
 
 
 mergeLefts :: [Either Char Document] -> [Either String Document]
@@ -84,18 +99,6 @@ mergeLefts = mergeLefts' . map (either (Left . (:[])) Right)
           mergeLefts' (Left str1:Left str2:xs) =
               mergeLefts' (Left (str1 ++ str2):xs)
           mergeLefts' (x:xs) = x:mergeLefts' xs
-    
-
-reduceEmphasisM :: ParserM ()
-reduceEmphasisM = reduceM reduceEmphasis
-    where reduceEmphasis =
-              mkSpan "emphasis" . map (either (mkPlain . tail) id) . mergeLefts
-
-
-reduceUnderlineM :: ParserM ()
-reduceUnderlineM = reduceM reduceUnderline
-    where reduceUnderline =
-              mkSpan "underline" . map (either (mkPlain . tail) id) . mergeLefts
 
 
 reducePlainM :: ParserM ()
@@ -104,66 +107,46 @@ reducePlainM = reduceM reducePlain
               mkSpan "plain" . map (either mkPlain id) . mergeLefts
 
 
-reconstructEmphasis :: String -> ParserM ()
-reconstructEmphasis str
-    | null str =
-        do modify $ \s -> s { isEmphasis = False }
-           reducePlainM
-    | head str == '\'' =
-        do emphasis <- isEmphasis <$> get
-           if emphasis
-           then do
-             modify $ \s -> s { isEmphasis = False }
-             skipM
-             reduceEmphasisM
-           else do
-             modify $ \s -> s { isEmphasis = True }
-             pushM
-             shiftM
-             gotoM reconstructEmphasis
-    | head str == '_' =
-        do underline <- isUnderline <$> get
-           if underline
-           then do
-             modify $ \s -> s { isEmphasis = False }
-             popM
-           else do
-             gotoM reconstructUnderline
-             gotoM reconstructEmphasis
-    | otherwise =
-        do shiftM
-           gotoM reconstructEmphasis
+reconstructEmphasisM :: a -> ParserM ()
+reconstructEmphasisM _ =
+    enterM stateFn grammarM reduceActionM
+    where stateFn t s = s { isEmphasis = t }
+
+          grammarM "" = return ()
+          grammarM ('\'':_) = return ()
+          grammarM ('_':_) =
+              do underline <- isUnderline <$> get
+                 unless underline $ do
+                   gotoM reconstructUnderlineM
+                   gotoM grammarM
+          grammarM _ = shiftM >> gotoM grammarM
+
+          reduceFn = mkSpan "emphasis" . map (either mkPlain id) . mergeLefts . tail
+
+          reduceActionM "" = reducePlainM
+          reduceActionM ('\'':_) = skipM >> reduceM reduceFn
+          reduceActionM ('_':_) = popM
 
 
-reconstructUnderline :: String -> ParserM ()
-reconstructUnderline str
-    | null str =
-        do modify $ \s -> s { isUnderline = False }
-           reducePlainM
-    | head str == '\'' =
-        do emphasis <- isEmphasis <$> get
-           if emphasis
-           then do
-             modify $ \s -> s { isUnderline = False }
-             popM
-           else do
-             gotoM reconstructEmphasis
-             gotoM reconstructUnderline
-    | head str == '_' =
-        do underline <- isUnderline <$> get
-           if underline
-           then do
-             modify $ \s -> s { isUnderline = False }
-             skipM
-             reduceUnderlineM
-           else do
-             modify $ \s -> s { isUnderline = True }
-             pushM
-             shiftM
-             gotoM reconstructUnderline
-    | otherwise =
-        do shiftM
-           gotoM reconstructUnderline
+reconstructUnderlineM :: a -> ParserM ()
+reconstructUnderlineM _ =
+    enterM stateFn grammarM reduceActionM
+    where stateFn t s = s { isUnderline = t }
+
+          grammarM "" = return ()
+          grammarM ('\'':_) =
+              do emphasis <- isEmphasis <$> get
+                 unless emphasis $ do
+                   gotoM reconstructEmphasisM
+                   gotoM grammarM
+          grammarM ('_':_) = return ()
+          grammarM _ = shiftM >> gotoM grammarM
+
+          reduceFn =  mkSpan "underline" . map (either mkPlain id) . mergeLefts . tail
+
+          reduceActionM "" = reducePlainM
+          reduceActionM ('\'':_) = popM
+          reduceActionM ('_':_) = skipM >> reduceM reduceFn
 
 
 reconstructPlain :: String -> ParserM ()
@@ -178,7 +161,7 @@ reconstructPlain str
              modify $ \s -> s { isPlain = False }
              popM
            else do
-             gotoM reconstructEmphasis
+             gotoM reconstructEmphasisM
              gotoM reconstructPlain
     | head str == '_' =
         do underline <- isUnderline <$> get
@@ -187,7 +170,7 @@ reconstructPlain str
               modify $ \s -> s { isPlain = False }
               popM
            else do
-             gotoM reconstructUnderline
+             gotoM reconstructUnderlineM
              gotoM reconstructPlain
     | otherwise =
         do plain <- isPlain <$> get
@@ -203,10 +186,10 @@ reconstructM str
     | null str =
         modify $ \s -> s { stack = reverse (head (stack s)):tail (stack s) }
     | head str == '\'' =
-        do gotoM reconstructEmphasis
+        do gotoM reconstructEmphasisM
            gotoM reconstructM
     | head str == '_' =
-        do gotoM reconstructUnderline
+        do gotoM reconstructUnderlineM
            gotoM reconstructM
     | otherwise =
         do gotoM reconstructPlain
