@@ -218,6 +218,7 @@ reconstruct str =
         (_, state') = runState (pushM >> reconstructM str) state
     in
       case stack state' of
+        -- edit: lazy evaluation and inner 'error' don't play nicely!
         [docs] -> map (either (error "reconstruct") id) docs
         x -> error $ "reconstruct " ++ show x
 
