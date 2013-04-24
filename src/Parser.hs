@@ -11,6 +11,8 @@ import Data.Document
 import Data.Token
 import Utils
 
+import Debug.Trace
+
 
 -- 'isParagraphItemLn' @str@ decides whether @str@ is a heading or a
 -- paragraph.
@@ -27,8 +29,9 @@ isBulletItem _ = False
 
 data ParserState =
     ParserState { input :: String
-                , stack :: [Either String Document]
+                , stack :: [[Either String Document]]
                 , isEmphasis :: Bool
+                , isPlain :: Bool
                 , isUnderline :: Bool }
 
 type ParserM a = State ParserState a
@@ -41,60 +44,83 @@ skipM = modify $ \s -> s { input = tail (input s) }
 shiftM :: ParserM ()
 shiftM =
     do s <- get
+       when (null (head (stack s))) $ do
+         modify $ \s -> s { stack = [Left ""]:tail (stack s) }
+
+       s <- get
        let c = head (input s)
-       case head (stack s) of
-         Left str -> put s { input = tail (input s)
-                           , stack = Left (c:str):tail (stack s) }
-         Right _ -> put s { input = tail (input s)
-                          , stack = Left [c]:stack s }
+       case head $ head $ stack s of
+         Left str -> do let top = head (stack s)
+                            top' = Left (c:str):tail top
+                            stack' = top':tail (stack s)
+                        put s { input = tail (input s)
+                              , stack = stack' }
+         Right _ -> do let top = head (stack s)
+                           top' = Left [c]:top
+                           stack' = top':tail (stack s)
+                       put s { input = tail (input s)
+                             , stack = stack' }
 
 
 gotoM :: (String -> ParserM a) -> ParserM a
 gotoM m = m =<< input <$> get
 
 
+pushM :: ParserM ()
+pushM = modify $ \s -> s { stack = []:stack s }
+
+
+reduceM :: ([Either String Document] -> Document) -> ParserM ()
+reduceM fn =
+    do stack <- stack <$> get
+       let top = reverse (head stack)
+           doc = fn top
+           stack' = tail stack
+           top' = head stack'
+       modify $ \s -> s { stack = (Right doc:top'):tail stack' }
+
+
 reduceEmphasisM :: ParserM ()
-reduceEmphasisM =
-    do s <- get
-       let sty = case head (stack s) of
-                   Left str -> mkSpan "emphasis" [mkPlain (tail (reverse str))]
-                   Right doc -> mkSpan "emphasis" [doc]
-       put s { stack = Right sty:tail (stack s) }
+reduceEmphasisM = reduceM reduceEmphasis
+    where reduceEmphasis =
+              mkSpan "emphasis" . map (either (mkPlain . tail . reverse) id)
 
 
 reduceUnderlineM :: ParserM ()
-reduceUnderlineM =
-    do s <- get
-       let sty = case head (stack s) of
-                   Left str -> mkSpan "underline" [mkPlain (tail (reverse str))]
-                   Right doc -> mkSpan "underline" [doc]
-       put s { stack = Right sty:tail (stack s) }
+reduceUnderlineM = reduceM reduceUnderline
+    where reduceUnderline =
+              mkSpan "underline" . map (either (mkPlain . tail . reverse) id)
 
 
 reducePlainM :: ParserM ()
-reducePlainM =
-    do s <- get
-       let sty = case head (stack s) of
-                   Left str -> mkPlain (reverse str)
-                   Right doc -> error "reducePlainM"
-       put s { stack = Right sty:tail (stack s) }
+reducePlainM = reduceM reducePlain
+    where reducePlain =
+              mkSpan "plain" . map (either (mkPlain . reverse) id)
 
 
 reconstructEmphasis :: String -> ParserM ()
 reconstructEmphasis str
     | null str = reducePlainM
     | head str == '\'' =
-        do skipM
-           reduceEmphasisM
+        do emphasis <- isEmphasis <$> get
+           if emphasis
+           then do
+             modify $ \s -> s { isEmphasis = False }
+             skipM
+             reduceEmphasisM
+           else do
+             modify $ \s -> s { isEmphasis = True }
+             pushM
+             shiftM
+             gotoM reconstructEmphasis
     | head str == '_' =
         do underline <- isUnderline <$> get
            unless underline $ do
-             shiftM
-             reconstructUnderlineM
-             reconstructEmphasisM
+             gotoM reconstructUnderline
+             gotoM reconstructEmphasis
     | otherwise =
         do shiftM
-           reconstructEmphasisM
+           gotoM reconstructEmphasis
 
 
 reconstructUnderline :: String -> ParserM ()
@@ -103,46 +129,76 @@ reconstructUnderline str
     | head str == '\'' =
         do emphasis <- isEmphasis <$> get
            unless emphasis $ do
-             shiftM
-             reconstructEmphasisM
-             reconstructUnderlineM
+             gotoM reconstructEmphasis
+             gotoM reconstructUnderline
     | head str == '_' =
-        do skipM
-           reduceUnderlineM
+        do underline <- isUnderline <$> get
+           if underline
+           then do
+             modify $ \s -> s { isUnderline = False }
+             skipM
+             reduceUnderlineM
+           else do
+             modify $ \s -> s { isUnderline = True }
+             pushM
+             shiftM
+             gotoM reconstructUnderline
     | otherwise =
         do shiftM
-           reconstructUnderlineM
+           gotoM reconstructUnderline
 
 
-reconstructEmphasisM :: ParserM ()
-reconstructEmphasisM =
-    do modify $ \s -> s { isEmphasis = True }
-       gotoM reconstructEmphasis
-       modify $ \s -> s { isEmphasis = False }
-
-
-reconstructUnderlineM :: ParserM ()
-reconstructUnderlineM =
-    do modify $ \s -> s { isUnderline = True }
-       gotoM reconstructUnderline
-       modify $ \s -> s { isUnderline = False }
+reconstructPlain :: String -> ParserM ()
+reconstructPlain str
+    | null str =
+        do modify $ \s -> s { isPlain = False }
+           reducePlainM
+    | head str == '\'' =
+        do emphasis <- isEmphasis <$> get
+           unless emphasis $ do
+             gotoM reconstructEmphasis
+             gotoM reconstructPlain
+    | head str == '_' =
+        do underline <- isUnderline <$> get
+           unless underline $ do
+             gotoM reconstructUnderline
+             gotoM reconstructPlain
+    | otherwise =
+        do plain <- isPlain <$> get
+           unless plain $ do
+             modify $ \s -> s { isPlain = True }
+             pushM
+           shiftM
+           gotoM reconstructPlain
 
 
 reconstructM :: String -> ParserM ()
 reconstructM str
-    | null str = reducePlainM
-    | head str == '\'' = shiftM >> reconstructEmphasisM
-    | head str == '_' = shiftM >> reconstructUnderlineM
-    | otherwise = shiftM >> gotoM reconstructM
+    | null str = modify $ \s -> s { stack = reverse (head (stack s)):tail (stack s) }
+    | head str == '\'' =
+        do gotoM reconstructEmphasis
+           gotoM reconstructM
+    | head str == '_' =
+        do gotoM reconstructUnderline
+           gotoM reconstructM
+    | otherwise =
+        do gotoM reconstructPlain
+           gotoM reconstructM
 
 
 reconstruct :: String -> [Document]
 reconstruct str =
-    let (_, s) = runState (gotoM reconstructM) ParserState { input = str
-                                                           , stack = [Left ""]
-                                                           , isEmphasis = False
-                                                           , isUnderline = False } in
-    [either (error "reconstruct") id (head (stack s))]
+    let state = ParserState { input = str
+                            , stack = []
+                            , isEmphasis = False
+                            , isPlain = False
+                            , isUnderline = False }
+        (_, state') = runState (pushM >> reconstructM str) state in
+    case stack state' of
+      [] -> error "stack is empty"
+      [[]] -> error "stack of stack is empty"
+      [docs] -> map (either (error "reconstruct") id) docs
+      x -> error $ "problematic " ++ show x
 
 
 -- 'reconstruct' @str@ produces the 'List' of 'Text' elements
