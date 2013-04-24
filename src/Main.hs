@@ -20,9 +20,8 @@ data Flag
     | OutputLatex
     -- | Output to a PDF file using LaTeX format and 'pdflatex'.
     | OutputPdf
-      
+    -- | Output to 'stdout' the tokens produced by the Lexer.
     | OutputToken
-
     -- | Output to 'stdout' in XML format.
     | OutputXml
     -- | Display usage information.
