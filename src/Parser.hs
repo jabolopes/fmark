@@ -196,13 +196,19 @@ reconstructM str
            gotoM reconstructM
 
 
--- 'reconstruct' @str@ produces the 'List' of 'Element's for 'String'
+-- | 'reconstruct' @str@ produces the 'List' of 'Document's for
 -- @str@.
 --
--- Example
--- > How 'are' _you_?
+-- @str@ cannot contain newline (i.e., @'\n'@) characters.
 --
--- > Span "plain"     "How "
+-- Example
+--
+-- > reconstruct "How 'are' _you_?"
+--
+-- produces a 'List' containing roughly the following 'Document'
+-- elements
+--
+-- > Span "plain"     "How"
 -- > Span "emphasis"  "are"
 -- > Span "plain"     " "
 -- > Span "underline" "you"
@@ -223,24 +229,35 @@ reconstruct str =
         x -> error $ "reconstruct " ++ show x
 
 
--- Example
--- > string1 ...
--- > string2 ...
+-- | 'spanify' @lns@ identifies whether @lns@ correspond to a heading
+-- or a paragraph, and produces the corresponding 'Document'.
+--
+-- 'spanify' calls 'reconstruct' to reconstruct 'Document's contained
+-- inside the heading or paragraph.
+--
+-- Heading example
+--
+-- > spanify ["string1 ...", "string2 ..."]
+--
+-- produces roughly
 --
 -- > Heading
--- >  Doc (string1 ...)
--- >  Doc (string2 ...)
+-- >   Span "line" (... "string1 ...")
+-- >   Span "line" (... "string2 ...")
 --
--- Example
--- > string1 ...
--- > string2 ... '.'
+-- Paragraph example (note final period)
 --
--- > Paragraph
--- >  Doc (string1 ... ' ' string2 ... '.')
+-- > spanify [string1 ..., "string2 ... ."]
+--
+-- produces roughly
+--
+-- > Paragraph (... "string1 ... string2 ... .")
 spanify :: [String] -> Document
 spanify lns
-    | all isHeadingLn lns = mkHeading $ map (Document (0, [], "") (Span "line") . reconstruct) lns
-    | otherwise = mkParagraph $ reconstruct $ intercalate " " lns
+    | all isHeadingLn lns =
+        mkHeading $ map (Document (0, [], "") (Span "line") . reconstruct) lns
+    | otherwise =
+        mkParagraph $ reconstruct $ intercalate " " lns
 
 
 -- Example
