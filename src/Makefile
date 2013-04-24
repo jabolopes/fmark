@@ -1,6 +1,9 @@
 all: dist/bin dist/obj
 	ghc --make Main.hs -o dist/bin/fmark -outputdir dist/obj
 
+debug: dist/bin dist/obj
+	ghc -debug --make Main.hs -o dist/bin/fmark -outputdir dist/obj
+
 dist/bin:
 	mkdir -p dist/bin
 
