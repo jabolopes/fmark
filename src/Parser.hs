@@ -167,8 +167,8 @@ reconstructPlain str
         do underline <- isUnderline <$> get
            if underline
            then do
-              modify $ \s -> s { isPlain = False }
-              popM
+             modify $ \s -> s { isPlain = False }
+             popM
            else do
              gotoM reconstructUnderlineM
              gotoM reconstructPlain
@@ -196,6 +196,17 @@ reconstructM str
            gotoM reconstructM
 
 
+-- 'reconstruct' @str@ produces the 'List' of 'Element's for 'String'
+-- @str@.
+--
+-- Example
+-- > How 'are' _you_?
+--
+-- > Span "plain"     "How "
+-- > Span "emphasis"  "are"
+-- > Span "plain"     " "
+-- > Span "underline" "you"
+-- > Span "plain"     "?"
 reconstruct :: String -> [Document]
 reconstruct str =
     let
@@ -207,23 +218,8 @@ reconstruct str =
         (_, state') = runState (pushM >> reconstructM str) state
     in
       case stack state' of
-        [] -> error "stack is empty"
-        [[]] -> error "stack of stack is empty"
         [docs] -> map (either (error "reconstruct") id) docs
-        x -> error $ "problematic " ++ show x
-
-
--- 'reconstruct' @str@ produces the 'List' of 'Text' elements
--- for 'String' @str@.
---
--- Example
--- > How 'are' _you_?
---
--- > Plain "How "
--- > Span "emphasis" "are"
--- > Plain " "
--- > Span "underline" "you"
--- > Plain "?"
+        x -> error $ "reconstruct " ++ show x
 
 
 -- Example
