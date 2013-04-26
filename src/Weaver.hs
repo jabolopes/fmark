@@ -68,14 +68,28 @@ ensureDocument [doc] = doc
 ensureDocument docs = mkContent docs
 
 
+similar :: Element -> Element -> Bool
+similar (Plain _) (Plain _) = True
+similar (Span _) (Span _) = True
+similar el1 el2 = el1 == el2
+
+
+dropTerminator :: String -> String
+dropTerminator str
+    | isHeadingLn str = str
+    | otherwise = init str
+
+
 -- 'weaveStyle' @doc style@ combines content 'Document' @doc@ and
 -- style 'Document' @style@ in a single styled 'Document'.
 weave :: Document -> Document -> (Document, [String])
-weave cnt@(Document loc1 loc2 (Plain _) []) Document { element = Plain sty } =
-    (cnt { element = Span sty, children = [cnt] }, [])
+weave cnt@(Document { element = Plain _ }) Document { element = Plain sty } =
+    case dropTerminator sty of
+      "" -> (cnt, [])
+      sty' -> (cnt { element = Span sty', children = [cnt] }, [])
 
 weave cnt@(Document cntLoc1 cntLoc2 el1 docs1) sty@(Document styLoc1 styLoc2 el2 docs2)
-    | el1 /= el2 =
+    | not (similar el1 el2) =
         (cnt, [msgLines "EDIT" cntLoc1 cntLoc2 styLoc1 styLoc2])
     | length docs1 < length docs2 =
         (cnt, [msgLines "EDIT" cntLoc1 cntLoc2 styLoc1 styLoc2])
