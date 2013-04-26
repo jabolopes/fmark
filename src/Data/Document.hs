@@ -54,28 +54,43 @@ data Document
                 deriving (Show)
 
 
-mkDocument :: Element -> [Document] -> Document
-mkDocument = Document (0, [], "") (0, [], "")
+rangeLoc :: [Document] -> (Srcloc, Srcloc)
+rangeLoc docs =
+    let
+        Document { beginLoc = loc1 } = head docs
+        Document { endLoc = loc2 } = last docs
+    in
+      (loc1, loc2)
 
 
 mkBlock :: BlockT -> [Document] -> Document
-mkBlock t docs = mkDocument (Block t) docs
+mkBlock t docs =
+    let (loc1, loc2) = rangeLoc docs in
+    Document loc1 loc2 (Block t) docs
 
 
 mkContent :: [Document] -> Document
-mkContent = mkDocument Content
+mkContent docs =
+    let (loc1, loc2) = rangeLoc docs in
+    Document loc1 loc2 Content docs
 
 
 mkEnumeration :: EnumerationT -> [Document] -> Document
-mkEnumeration t = mkDocument (Enumeration t)
+mkEnumeration t docs =
+    let (loc1, loc2) = rangeLoc docs in
+    Document loc1 loc2 (Enumeration t) docs
 
 
-mkHeading :: Srcloc -> Srcloc -> [Document] -> Document
-mkHeading loc1 loc2 = Document loc1 loc2 Heading
+mkHeading :: [Document] -> Document
+mkHeading docs =
+    let (loc1, loc2) = rangeLoc docs in
+    Document loc1 loc2 Heading docs
 
 
-mkParagraph :: Srcloc -> Srcloc -> [Document] -> Document
-mkParagraph loc1 loc2 = Document loc1 loc2 Paragraph
+mkParagraph :: [Document] -> Document
+mkParagraph docs =
+    let (loc1, loc2) = rangeLoc docs in
+    Document loc1 loc2 Paragraph docs
 
 
 mkPlain :: Srcloc -> Srcloc -> String -> Document
@@ -84,13 +99,3 @@ mkPlain loc1 loc2 str = Document loc1 loc2 (Plain str) []
 
 mkSpan :: Srcloc -> Srcloc -> String -> [Document] -> Document
 mkSpan loc1 loc2 sty docs = Document loc1 loc2 (Span sty) docs
-
-
-isBlock :: Document -> Bool
-isBlock Document { element = Block _ } = True
-isBlock _ = False
-
-
-isHeading :: Document -> Bool
-isHeading Document { element = Heading } = True
-isHeading _ = False

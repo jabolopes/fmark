@@ -65,7 +65,7 @@ weaveExtraDocuments loc1 loc2 lns sty = (lns, [msgLine "EDIT" loc1 loc2 (show st
 ensureDocument :: [Document] -> Document
 ensureDocument [doc] = doc
 -- edit: fix srcloc
-ensureDocument docs = mkDocument Content docs
+ensureDocument docs = mkContent docs
 
 
 -- 'weaveStyle' @doc style@ combines content 'Document' @doc@ and

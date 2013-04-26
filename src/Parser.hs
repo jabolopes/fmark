@@ -3,7 +3,7 @@ module Parser where
 
 import Control.Monad.State
 import Data.Char
-import Data.Either (either)
+import Data.Either (either, lefts, rights)
 import Data.Functor ((<$>))
 import Data.List (intercalate)
 
@@ -98,8 +98,7 @@ enterM stateFn grammarM reduceActionM =
 
 mergeLefts :: [Either Char Document] -> [Either String Document]
 mergeLefts = mergeLefts' . map (either (Left . (:[])) Right)
-    where mergeLefts' :: [Either String Document] -> [Either String Document]
-          mergeLefts' [] = []
+    where mergeLefts' [] = []
           mergeLefts' (Left str1:Left str2:xs) =
               mergeLefts' (Left (str1 ++ str2):xs)
           mergeLefts' (x:xs) = x:mergeLefts' xs
@@ -263,9 +262,9 @@ reconstruct loc1 loc2 str =
 spanify :: Srcloc -> Srcloc -> [String] -> Document
 spanify loc1 loc2 lns
     | all isHeadingLn lns =
-        mkHeading loc1 loc2 $ map (Document loc1 loc2 (Span "line") . (reconstruct loc1 loc2)) lns
+        mkHeading $ map (Document loc1 loc2 (Span "line") . (reconstruct loc1 loc2)) lns
     | otherwise =
-        mkParagraph loc1 loc2 $ reconstruct loc1 loc2 $ intercalate " " lns
+        mkParagraph $ reconstruct loc1 loc2 $ intercalate " " lns
 
 
 -- Example
@@ -312,17 +311,17 @@ blockify [] = []
 
 blockify es@(Left _:_) =
     let (locs, docs) = span (either (const True) (const False)) es in
-    spanify (fromLeft (head locs)) (fromLeft (last locs)) (map locText locs):blockify docs
-    where locText (Left (_, _, str)) = str
+    spanify (head (lefts locs)) (last (lefts locs)) (map thd (lefts locs)):blockify docs
+    where thd (_, _, x) = x
 
 blockify es@(Right doc:_) | isBulletItem doc =
-    let (items, locs) = span (either (const False) isBulletItem) es in
-    mkEnumeration BulletEnumerationT (map (\(Right doc) -> doc) items):blockify locs
+    let (items, es') = span (either (const False) isBulletItem) es in
+    mkEnumeration BulletEnumerationT (rights items):blockify es'
 
 blockify (Right item@(Document { element = Block (NumberItemT n) }):es) =
-    let (items, locs) = spanOrderedItems n es in
-    mkEnumeration NumberEnumerationT (item:items):blockify locs
-        where spanOrderedItems _ xs@[] =  ([], xs)
+    let (items, es') = spanOrderedItems n es in
+    mkEnumeration NumberEnumerationT (item:items):blockify es'
+        where spanOrderedItems _ [] =  ([], [])
               spanOrderedItems n1 xs@(Right x@(Document { element = Block (NumberItemT n2) }):xs')
                   | n1 == n2 - 1 = let (ys,zs) = spanOrderedItems n2 xs' in (x:ys,zs)
                   | otherwise = ([], xs)
