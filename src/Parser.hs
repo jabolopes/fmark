@@ -263,7 +263,7 @@ reconstruct loc1 loc2 str =
 spanify :: Srcloc -> Srcloc -> [String] -> Document
 spanify loc1 loc2 lns
     | all isHeadingLn lns =
-        mkHeading $ map (Document loc1 loc2 (Span "line") . (reconstruct loc1 loc2)) lns
+        mkHeading loc1 loc2 $ map (Document loc1 loc2 (Span "line") . (reconstruct loc1 loc2)) lns
     | otherwise =
         mkParagraph loc1 loc2 $ reconstruct loc1 loc2 $ intercalate " " lns
 
@@ -316,7 +316,7 @@ blockify es@(Left _:_) =
     where locText (Left (_, _, str)) = str
 
 blockify es@(Right doc:_) | isBulletItem doc =
-    let  (items, locs) = span (either (const False) isBulletItem) es in
+    let (items, locs) = span (either (const False) isBulletItem) es in
     mkEnumeration BulletEnumerationT (map (\(Right doc) -> doc) items):blockify locs
 
 blockify (Right item@(Document { element = Block (NumberItemT n) }):es) =

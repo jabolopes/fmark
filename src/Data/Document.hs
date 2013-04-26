@@ -70,8 +70,8 @@ mkEnumeration :: EnumerationT -> [Document] -> Document
 mkEnumeration t = mkDocument (Enumeration t)
 
 
-mkHeading :: [Document] -> Document
-mkHeading = mkDocument Heading
+mkHeading :: Srcloc -> Srcloc -> [Document] -> Document
+mkHeading loc1 loc2 = Document loc1 loc2 Heading
 
 
 mkParagraph :: Srcloc -> Srcloc -> [Document] -> Document
