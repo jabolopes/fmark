@@ -5,14 +5,6 @@ import Data.Char (isSpace)
 import Data.List (dropWhileEnd)
 
 
-(&&.) :: (t -> Bool) -> (t -> Bool) -> t -> Bool
-(&&.) fn1 fn2 = \x -> fn1 x && fn2 x
-
-
-(||.) :: (t -> Bool) -> (t -> Bool) -> t -> Bool
-(||.) fn1 fn2 = \x -> fn1 x || fn2 x
-
-
 -- | 'filterLines' @lns@ filters empty lines and lines containing only
 -- space characters from @lns@.
 --
