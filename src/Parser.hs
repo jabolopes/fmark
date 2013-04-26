@@ -28,7 +28,9 @@ isBulletItem _ = False
 
 
 data ParserState =
-    ParserState { input :: String
+    ParserState { loc1 :: Srcloc
+                , loc2 :: Srcloc
+                , input :: String
                 , stack :: [[Either Char Document]]
                 , isEmphasis :: Bool
                 , isPlain :: Bool
@@ -50,11 +52,13 @@ shiftM =
              , stack = top:tail (stack s) }
 
 
-reduceM :: ([Either Char Document] -> Document) -> ParserM ()
+reduceM :: (Srcloc -> Srcloc -> [Either Char Document] -> Document) -> ParserM ()
 reduceM fn =
     do stack <- stack <$> get
+       loc1 <- loc1 <$> get
+       loc2 <- loc2 <$> get
        let top = reverse (head stack)
-           doc = fn top
+           doc = fn loc1 loc2 top
            stack' = tail stack
            top' = head stack'
        modify $ \s -> s { stack = (Right doc:top'):tail stack' }
@@ -103,8 +107,8 @@ mergeLefts = mergeLefts' . map (either (Left . (:[])) Right)
 
 reducePlainM :: ParserM ()
 reducePlainM = reduceM reducePlain
-    where reducePlain =
-              mkSpan "plain" . map (either mkPlain id) . mergeLefts
+    where reducePlain loc1 loc2 =
+              mkSpan loc1 loc2 "plain" . map (either (mkPlain loc1 loc2) id) . mergeLefts
 
 
 reconstructEmphasisM :: a -> ParserM ()
@@ -121,7 +125,8 @@ reconstructEmphasisM _ =
                    gotoM grammarM
           grammarM _ = shiftM >> gotoM grammarM
 
-          reduceFn = mkSpan "emphasis" . map (either mkPlain id) . mergeLefts . tail
+          reduceFn loc1 loc2 =
+              mkSpan loc1 loc2 "emphasis" . map (either (mkPlain loc1 loc2) id) . mergeLefts . tail
 
           reduceActionM "" = reducePlainM
           reduceActionM ('\'':_) = skipM >> reduceM reduceFn
@@ -142,7 +147,8 @@ reconstructUnderlineM _ =
           grammarM ('_':_) = return ()
           grammarM _ = shiftM >> gotoM grammarM
 
-          reduceFn =  mkSpan "underline" . map (either mkPlain id) . mergeLefts . tail
+          reduceFn loc1 loc2 =
+              mkSpan loc1 loc2 "underline" . map (either (mkPlain loc1 loc2) id) . mergeLefts . tail
 
           reduceActionM "" = reducePlainM
           reduceActionM ('\'':_) = popM
@@ -196,7 +202,7 @@ reconstructM str
            gotoM reconstructM
 
 
--- | 'reconstruct' @str@ produces the 'List' of 'Document's for
+-- 'reconstruct' @str@ produces the 'List' of 'Document's for
 -- @str@.
 --
 -- @str@ cannot contain newline (i.e., @'\n'@) characters.
@@ -213,10 +219,12 @@ reconstructM str
 -- > Span "plain"     " "
 -- > Span "underline" "you"
 -- > Span "plain"     "?"
-reconstruct :: String -> [Document]
-reconstruct str =
+reconstruct :: Srcloc -> Srcloc -> String -> [Document]
+reconstruct loc1 loc2 str =
     let
-        state = ParserState { input = str
+        state = ParserState { loc1 = loc1
+                            , loc2 = loc2
+                            , input = str
                             , stack = []
                             , isEmphasis = False
                             , isPlain = False
@@ -229,7 +237,7 @@ reconstruct str =
         x -> error $ "reconstruct " ++ show x
 
 
--- | 'spanify' @lns@ identifies whether @lns@ correspond to a heading
+-- 'spanify' @lns@ identifies whether @lns@ correspond to a heading
 -- or a paragraph, and produces the corresponding 'Document'.
 --
 -- 'spanify' calls 'reconstruct' to reconstruct 'Document's contained
@@ -252,12 +260,12 @@ reconstruct str =
 -- produces roughly
 --
 -- > Paragraph (... "string1 ... string2 ... .")
-spanify :: [String] -> Document
-spanify lns
+spanify :: Srcloc -> Srcloc -> [String] -> Document
+spanify loc1 loc2 lns
     | all isHeadingLn lns =
-        mkHeading $ map (mkSpan "line" . reconstruct) lns
+        mkHeading $ map (Document loc1 loc2 (Span "line") . (reconstruct loc1 loc2)) lns
     | otherwise =
-        mkParagraph $ reconstruct $ intercalate " " lns
+        mkParagraph loc1 loc2 $ reconstruct loc1 loc2 $ intercalate " " lns
 
 
 -- Example
@@ -304,7 +312,8 @@ blockify [] = []
 
 blockify es@(Left _:_) =
     let (locs, docs) = span (either (const True) (const False)) es in
-    spanify (map (\(Left (_, _, str)) -> str) locs):blockify docs
+    spanify (fromLeft (head locs)) (fromLeft (last locs)) (map locText locs):blockify docs
+    where locText (Left (_, _, str)) = str
 
 blockify es@(Right doc:_) | isBulletItem doc =
     let  (items, locs) = span (either (const False) isBulletItem) es in

@@ -74,16 +74,16 @@ mkHeading :: [Document] -> Document
 mkHeading = mkDocument Heading
 
 
-mkParagraph :: [Document] -> Document
-mkParagraph = mkDocument Paragraph
+mkParagraph :: Srcloc -> Srcloc -> [Document] -> Document
+mkParagraph loc1 loc2 = Document loc1 loc2 Paragraph
 
 
-mkPlain :: String -> Document
-mkPlain str = mkDocument (Plain str) []
+mkPlain :: Srcloc -> Srcloc -> String -> Document
+mkPlain loc1 loc2 str = Document loc1 loc2 (Plain str) []
 
 
-mkSpan :: String -> [Document] -> Document
-mkSpan sty docs = mkDocument (Span sty) docs
+mkSpan :: Srcloc -> Srcloc -> String -> [Document] -> Document
+mkSpan loc1 loc2 sty docs = Document loc1 loc2 (Span sty) docs
 
 
 isBlock :: Document -> Bool

@@ -26,6 +26,10 @@ isLeft (Left _) = True
 isLeft _ = False
 
 
+fromLeft :: Either a b -> a
+fromLeft (Left x) = x
+
+
 -- | 'replace' @c str@ replaces newlines in @str@ with @c@
 --
 -- > replace "hello\ngoodbye" == "hello,goodbye"
