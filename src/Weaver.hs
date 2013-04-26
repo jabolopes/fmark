@@ -60,11 +60,11 @@ weaveExtraDocuments loc1 loc2 lns Document { element = Span _ } =
 weaveExtraDocuments loc1 loc2 lns sty = (lns, [msgLine "EDIT" loc1 loc2 (show sty)])
 
 
--- | 'ensureDocument' @docs@ the first elements of @docs@ if @docs@ is
--- a singleton list, otherwise, it returns a 'Content docs'
+-- | 'ensureDocument' @docs@ is the first element of @docs@, if @docs@
+-- is a singleton list, otherwise, it returns a 'Document' with
+-- element 'Content' containing docs.
 ensureDocument :: [Document] -> Document
 ensureDocument [doc] = doc
--- edit: fix srcloc
 ensureDocument docs = mkContent docs
 
 
