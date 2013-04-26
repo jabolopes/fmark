@@ -231,8 +231,8 @@ reconstruct loc1 loc2 str =
         (_, state') = runState (pushM >> reconstructM str) state
     in
       case stack state' of
-        -- edit: lazy evaluation and inner 'error' don't play nicely!
-        [docs] -> map (either (error "reconstruct") id) docs
+        -- edit: make it more efficient
+        [docs] | null (lefts docs) -> rights docs
         x -> error $ "reconstruct " ++ show x
 
 
@@ -261,6 +261,7 @@ reconstruct loc1 loc2 str =
 -- > Paragraph (... "string1 ... string2 ... .")
 spanify :: Srcloc -> Srcloc -> [String] -> Document
 spanify loc1 loc2 lns
+    -- edit: all lines must be a heading? not just the last?
     | all isHeadingLn lns =
         mkHeading $ map (Document loc1 loc2 (Span "line") . (reconstruct loc1 loc2)) lns
     | otherwise =
