@@ -7,7 +7,6 @@ import Data.List (intercalate)
 
 import Utils (trim)
 import Data.Document
-import Data.Text
 
 
 fulltitle :: Maybe String -> Maybe String -> String
@@ -49,26 +48,8 @@ par = lit
 seq = intercalate "\n" . filter (\ln -> trim ln /= "")
 
 
-loopText :: Text -> String
-loopText (Plain str) = lit str
-loopText (Ref str) = com "label" str
-loopText (Span sty txts) = com sty $ intercalate "\n" $ [ concatMap loopText txts ]
-
-
 properties :: Document -> [(String, String)]
-properties (Heading _ _) = []
-properties (Paragraph _ _) = []
-properties (Content docs) = concatMap properties docs
-properties (Section doc) = properties doc
-properties (Style _ sty lns) = [(sty, intercalate "\n" $ [ concatMap loopText txts | txts <- lns ])]
-
-
-loop :: Int -> Document -> String
-loop lvl (Heading _ lns) = sec lvl $ intercalate "\n" [ concatMap loopText txts | txts <- lns ]
-loop _ (Paragraph _ txts) = concatMap loopText txts
-loop lvl (Content docs) = seq $ map (loop lvl) docs
-loop lvl (Section doc) = loop (lvl + 1) doc
-loop _ Style {} = ""
+properties _ = []
 
 
 -- | 'docToLatex' @mstyle doc@ formats a styled 'Document' @doc@ into
@@ -91,9 +72,10 @@ docToLatexArticle mstyle doc =
            fulltitle title subtitle,
            prop (com "author") author,
            prop (com "date") date,
-           env "document" $ seq [maketitle,
-                                 prop (env "abstract") abstract,
-                                 loop 0 doc]]
+           -- env "document" $ seq [maketitle,
+           --                       prop (env "abstract") abstract,
+           --                       loop 0 doc]]
+           env "document" $ seq [maketitle, prop (env "abstract") abstract]]
 
 
 docToLatexLetter :: Maybe Document -> Document -> String

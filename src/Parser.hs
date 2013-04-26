@@ -23,7 +23,7 @@ isHeadingLn str = last str `notElem` paragraphTerminator
 
 -- 'isBulletItem' @doc@
 isBulletItem :: Document -> Bool
-isBulletItem (Document _ (Block BulletItemT) _) = True
+isBulletItem Document { element = Block BulletItemT } = True
 isBulletItem _ = False
 
 
@@ -255,7 +255,7 @@ reconstruct str =
 spanify :: [String] -> Document
 spanify lns
     | all isHeadingLn lns =
-        mkHeading $ map (Document (0, [], "") (Span "line") . reconstruct) lns
+        mkHeading $ map (mkSpan "line" . reconstruct) lns
     | otherwise =
         mkParagraph $ reconstruct $ intercalate " " lns
 
@@ -310,11 +310,11 @@ blockify es@(Right doc:_) | isBulletItem doc =
     let  (items, locs) = span (either (const False) isBulletItem) es in
     mkEnumeration BulletEnumerationT (map (\(Right doc) -> doc) items):blockify locs
 
-blockify (Right item@(Document _ (Block (NumberItemT n)) _):es) =
+blockify (Right item@(Document { element = Block (NumberItemT n) }):es) =
     let (items, locs) = spanOrderedItems n es in
     mkEnumeration NumberEnumerationT (item:items):blockify locs
         where spanOrderedItems _ xs@[] =  ([], xs)
-              spanOrderedItems n1 xs@(Right x@(Document _ (Block (NumberItemT n2)) _):xs')
+              spanOrderedItems n1 xs@(Right x@(Document { element = Block (NumberItemT n2) }):xs')
                   | n1 == n2 - 1 = let (ys,zs) = spanOrderedItems n2 xs' in (x:ys,zs)
                   | otherwise = ([], xs)
               spanOrderedItems _ xs = ([], xs)
@@ -337,13 +337,13 @@ docify tks = fst $ docify' SectionT tks [] []
 
           reduceEmpty :: BlockT -> [Token] -> [Either Srcloc Document] -> [Document] -> (Document, [Token])
           reduceEmpty sty tks locs docs =
-              let docs' = blockify $ reverse locs in
+              let docs' = blockify (reverse locs) in
               docify' sty tks [] (reverse docs' ++ docs)
 
           reduceSection :: BlockT -> [Token] -> [Either Srcloc Document] -> [Document] -> (Document, [Token])
           reduceSection sty tks locs docs =
-              let docs' = blockify $ reverse locs in
-              (mkBlock sty $ reverse docs ++ docs', tks)
+              let docs' = blockify (reverse locs) in
+              (mkBlock sty (reverse docs ++ docs'), tks)
 
           sectionT :: String -> BlockT
           sectionT "*" = BulletItemT

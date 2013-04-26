@@ -24,20 +24,20 @@ shortTagTs = [isSpanElement, isParagraphElement]
 
 mkHtmlDoc :: Document -> HtmlDoc
 mkHtmlDoc doc = mkHtmlDoc' LongT doc
-    where mkHtmlDoc' _ (Document _ el docs) | any (\fn -> fn el) shortTagTs =
+    where mkHtmlDoc' _ (Document _ _ el docs) | any (\fn -> fn el) shortTagTs =
               HtmlDoc ShortT el $ map (mkHtmlDoc' ShortT) docs
 
-          mkHtmlDoc' _ (Document _ el []) =
+          mkHtmlDoc' _ (Document _ _ el []) =
               HtmlDoc ShortT el []
 
-          mkHtmlDoc' ShortT (Document _ el [doc]) =
+          mkHtmlDoc' ShortT (Document _ _ el [doc]) =
               HtmlDoc ShortT el [mkHtmlDoc' ShortT doc]
 
-          mkHtmlDoc' LongT (Document _ el [doc]) =
+          mkHtmlDoc' LongT (Document _ _ el [doc]) =
               HtmlDoc (htmlDocTagT htmlDoc) el [htmlDoc]
               where htmlDoc = mkHtmlDoc' LongT doc
 
-          mkHtmlDoc' parentT (Document _ el docs) =
+          mkHtmlDoc' parentT (Document _ _ el docs) =
               HtmlDoc LongT el $ map (mkHtmlDoc' LongT) docs
 
 
@@ -98,31 +98,41 @@ tagM tag attrs parentTagT LongT ms = longTagM tag attrs parentTagT ms
 docToHtml :: Maybe Document -> Document -> String
 docToHtml _ doc =
     intercalate "\n" ["<html>",
-                      evalState hd 2,
-                      evalState body 2,
+                      -- evalState header 2,
+                      evalState body' 2,
                       "</html>"]
-    where hd = tagM "head" [] LongT LongT
-               [tagM "link" [("href", "style.css"),
-                             ("rel", "stylesheet"),
-                             ("type", "text/css")] LongT ShortT []]
+    where -- header = tagM "head" [] LongT LongT
+          --          [tagM "link" [("href", "style.css"),
+          --                        ("rel", "stylesheet"),
+          --                        ("type", "text/css")] LongT ShortT []]
+
+          header = tagM "head" [] LongT LongT []
 
           body = docToHtml' LongT (mkHtmlDoc doc)
-          
+
+          body' = tagM "body" [] LongT LongT [docToHtml' LongT (mkHtmlDoc doc)]
+
           elementBlockT BulletItemT = "li"
           elementBlockT (NumberItemT _) = "li"
           elementBlockT QuotationT = "blockquote"
           elementBlockT SectionT = "div"
           elementBlockT VerbatimT = "pre"
-          
+
+
+          elementTag :: Element -> TagT -> TagT -> [HtmlM String] -> HtmlM String
           elementTag (Block t) = tagM (elementBlockT t) []
-          elementTag Content = tagM "body" []
+          elementTag Content = tagM "div" [("class", "container")]
           elementTag (Enumeration BulletEnumerationT) = tagM "ul" []
           elementTag (Enumeration NumberEnumerationT) = tagM "ol" []
           elementTag Heading = tagM "h3" []
           elementTag Paragraph = tagM "p" []
           elementTag (Plain str) = \_ _ _ -> strM (return str)
           --elementTag Section = tagM "section" []
+          elementTag (Span "emphasis") = tagM "i" []
+          elementTag (Span "underline") = tagM "u" []
           elementTag (Span sty) = tagM "span" [("style", sty)]
 
+
+          docToHtml' :: TagT -> HtmlDoc -> HtmlM String
           docToHtml' parentTagT (HtmlDoc tagT el docs) =
              elementTag el parentTagT tagT $ map (docToHtml' tagT) docs

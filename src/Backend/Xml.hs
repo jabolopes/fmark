@@ -133,5 +133,5 @@ docToXml _ doc =
           elementTag (Span sty) = xmlShortTags sty []
 
           docToXml' :: Document -> XmlM String
-          docToXml' (Document _ el docs) =
-             elementTag el $ map docToXml' docs
+          docToXml' (Document _ _ el docs) =
+             elementTag el (map docToXml' docs)

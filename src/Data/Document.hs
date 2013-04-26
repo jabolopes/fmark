@@ -9,6 +9,7 @@ data BlockT
     | QuotationT
     | SectionT
     | VerbatimT
+      deriving (Eq)
 
 instance Show BlockT where
     show BulletItemT = "unordered"
@@ -21,7 +22,7 @@ instance Show BlockT where
 data EnumerationT
     = BulletEnumerationT
     | NumberEnumerationT
-      deriving (Show)
+      deriving (Eq, Show)
 
 
 data Element
@@ -32,7 +33,7 @@ data Element
     | Paragraph
     | Plain String
     | Span String
-      deriving (Show)
+      deriving (Eq, Show)
 
 
 isParagraphElement :: Element -> Bool
@@ -45,42 +46,51 @@ isSpanElement (Span _) = True
 isSpanElement _ = False
 
 
-data Document = Document Srcloc Element [Document]
+data Document
+    = Document { beginLoc :: Srcloc
+               , endLoc :: Srcloc
+               , element :: Element
+               , children :: [Document] }
                 deriving (Show)
 
 
 mkDocument :: Element -> [Document] -> Document
-mkDocument = Document (0, [], "")
+mkDocument = Document (0, [], "") (0, [], "")
 
 
 mkBlock :: BlockT -> [Document] -> Document
-mkBlock t docs = Document (0, [], "") (Block t) docs
+mkBlock t docs = mkDocument (Block t) docs
 
 
 mkContent :: [Document] -> Document
-mkContent = Document (0, [], "") Content
+mkContent = mkDocument Content
 
 
 mkEnumeration :: EnumerationT -> [Document] -> Document
-mkEnumeration t = Document (0, [], "") (Enumeration t)
+mkEnumeration t = mkDocument (Enumeration t)
 
 
 mkHeading :: [Document] -> Document
-mkHeading = Document (0, [], "") Heading
+mkHeading = mkDocument Heading
 
 
 mkParagraph :: [Document] -> Document
-mkParagraph = Document (0, [], "") Paragraph
+mkParagraph = mkDocument Paragraph
 
 
 mkPlain :: String -> Document
-mkPlain str = Document (0, [], "") (Plain str) []
+mkPlain str = mkDocument (Plain str) []
 
 
 mkSpan :: String -> [Document] -> Document
-mkSpan sty docs = Document (0, [], "") (Span sty) docs
+mkSpan sty docs = mkDocument (Span sty) docs
 
 
 isBlock :: Document -> Bool
-isBlock (Document _ (Block _) _) = True
+isBlock Document { element = Block _ } = True
 isBlock _ = False
+
+
+isHeading :: Document -> Bool
+isHeading Document { element = Heading } = True
+isHeading _ = False

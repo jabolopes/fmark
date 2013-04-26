@@ -17,7 +17,7 @@ import Data.Document
 import Data.Token
 import Lexer
 import Parser
---import Weaver
+import Weaver
 
 
 -- 'pdflatex' @outFp contents@ executes the 'pdflatex' 'Process'
@@ -88,11 +88,13 @@ fmark FormatToken contents _ =
 fmark fmt contents Nothing =
     (formatFn fmt Nothing $ docify $ classify contents, [])
 
--- fmark fmt contents (Just style) =
---     let doc = docify $ classify contents in
---     let styleDoc = docify $ classify style in
---     let (doc', errs) = weave doc styleDoc in
---     (formatFn fmt (Just styleDoc) doc', errs)
+fmark fmt contents (Just style) =
+    let
+        doc = docify $ classify contents
+        styleDoc = docify $ classify style
+        (doc', errs) = weave doc styleDoc
+    in
+      (formatFn fmt (Just styleDoc) doc', errs)
 
 
 -- | 'fmarkH' is an alternative version of 'fmark' that uses 'Handle's
